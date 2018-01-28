@@ -135,9 +135,11 @@ def draw_detection(frame, box, cls_id, conf, depth_mm, valid_count):
     cls_name = CLASS_NAMES.get(int(cls_id), f"id{int(cls_id)}")
 
     if depth_mm is not None and depth_mm > 0:
-        text = f"{cls_name} {conf:.2f} {depth_mm / 1000.0:.2f}m"
+        text = f"{cls_name} {conf:.2f}"
+        depth_text = f"{depth_mm / 1000.0:.2f}m"
     else:
         text = f"{cls_name} {conf:.2f} Depth Invalid"
+        depth_text = None
 
     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
@@ -149,6 +151,15 @@ def draw_detection(frame, box, cls_id, conf, depth_mm, valid_count):
         0.6,
         (0, 0, 255),
         2,
+    )
+    cv2.putText(
+        frame,
+        depth_text,
+        (x1, max(25, y1 + 30)),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1.0,
+        (255, 0, 255),
+        5,
     )
 
     cv2.putText(
