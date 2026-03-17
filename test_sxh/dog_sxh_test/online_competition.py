@@ -44,6 +44,7 @@ def parse_args():
     parser.add_argument("--normal-max", type=float, default=180.0, help="Normal angle upper bound")
     parser.add_argument("--report-interval", type=float, default=1.0, help="Terminal report interval seconds")
     parser.add_argument("--max-dashboards", type=int, default=6, help="How many dashboards to report")
+    parser.add_argument("--show-window", action="store_true", help="Show OpenCV window (requires GUI DISPLAY)")
     return parser.parse_args()
 
 
@@ -196,10 +197,14 @@ def main():
 
     state_histories = defaultdict(lambda: deque(maxlen=8))
     last_report_time = 0.0
-    last_report_text = ""
+    show_window = args.show_window
+    if show_window and not os.environ.get("DISPLAY"):
+        print("未检测到 DISPLAY，已自动切换为无窗口模式。")
+        show_window = False
 
     print(f"启动成功: camera={args.camera}, 分辨率={args.width}x{args.height}")
-    print("按 q 退出。")
+    if show_window:
+        print("按 q 退出。")
 
     try:
         while True:
@@ -274,15 +279,14 @@ def main():
                 for idx in range(1, args.max_dashboards + 1):
                     lines.append(f"仪表盘{idx}: {render_state_text(current_states.get(idx))}")
                 report = "\n".join(lines)
-                if report != last_report_text:
-                    print("-" * 40)
-                    print(report)
-                    last_report_text = report
+                print("-" * 40)
+                print(report)
                 last_report_time = now
 
-            cv2.imshow("online_competition_dashboard", frame)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
+            if show_window:
+                cv2.imshow("online_competition_dashboard", frame)
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    break
     finally:
         cap.release()
         cv2.destroyAllWindows()
