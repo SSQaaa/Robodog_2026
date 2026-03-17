@@ -36,14 +36,14 @@ COLOR_BY_STATE = {
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Online competition dashboard state detector")
-    parser.add_argument("--camera", type=int, default=2, help="Camera index")
-    parser.add_argument("--width", type=int, default=640, help="Camera width")
-    parser.add_argument("--height", type=int, default=640, help="Camera height")
+    parser.add_argument("--camera", type=int, default=0, help="Camera index")
+    parser.add_argument("--width", type=int, default=1280, help="Camera width")
+    parser.add_argument("--height", type=int, default=720, help="Camera height")
     parser.add_argument("--threshold", type=int, default=118, help="Pointer binarization threshold")
     parser.add_argument("--normal-min", type=float, default=120.0, help="Normal angle lower bound")
     parser.add_argument("--normal-max", type=float, default=180.0, help="Normal angle upper bound")
     parser.add_argument("--report-interval", type=float, default=1.0, help="Terminal report interval seconds")
-    parser.add_argument("--max-dashboards", type=int, default=6, help="How many dashboards to report")
+    parser.add_argument("--max-dashboards", type=int, default=1, help="How many dashboards to process")
     parser.add_argument("--show-window", action="store_true", help="Show OpenCV window (requires GUI DISPLAY)")
     return parser.parse_args()
 
@@ -169,6 +169,13 @@ def render_state_text(state):
     return f"{status} {level}"
 
 
+def pick_primary_state(current_states):
+    for idx in sorted(current_states.keys()):
+        if current_states[idx] is not None:
+            return current_states[idx]
+    return None
+
+
 def main():
     args = parse_args()
 
@@ -275,10 +282,8 @@ def main():
 
             now = time.time()
             if now - last_report_time >= args.report_interval:
-                lines = []
-                for idx in range(1, args.max_dashboards + 1):
-                    lines.append(f"仪表盘{idx}: {render_state_text(current_states.get(idx))}")
-                report = "\n".join(lines)
+                primary_state = pick_primary_state(current_states)
+                report = f"仪表盘：{render_state_text(primary_state)}"
                 print("-" * 40)
                 print(report)
                 last_report_time = now
