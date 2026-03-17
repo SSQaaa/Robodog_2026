@@ -22,9 +22,9 @@ if DOG_SXH_ROOT not in sys.path:
 DASHBOARD_CLASS_ID = 14
 SSI_CLASS_ID = 15
 STATE_TEXT = {
-    "low": ("偏低", "异常"),
+    "low": ("异常", "偏低"),
     "normal": ("正常", "正常"),
-    "high": ("偏高", "异常"),
+    "high": ("异常", "偏高"),
 }
 COLOR_BY_STATE = {
     "low": (0, 255, 255),      # yellow
@@ -164,9 +164,9 @@ def state_vote(history):
 
 def render_state_text(state):
     if state not in STATE_TEXT:
-        return "未识别"
-    zone, abnormal = STATE_TEXT[state]
-    return f"{zone}（{abnormal}）"
+        return "未识别 未识别"
+    status, level = STATE_TEXT[state]
+    return f"{status} {level}"
 
 
 def main():
