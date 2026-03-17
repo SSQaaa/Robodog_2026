@@ -10,13 +10,13 @@ import numpy as np
 
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, "..", ".."))
+DOG_SXH_ROOT = CURRENT_DIR
 ONLINE_COMP_DIR = os.path.join(CURRENT_DIR, "online_competition")
 
 if ONLINE_COMP_DIR not in sys.path:
     sys.path.insert(0, ONLINE_COMP_DIR)
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
+if DOG_SXH_ROOT not in sys.path:
+    sys.path.insert(0, DOG_SXH_ROOT)
 
 
 DASHBOARD_CLASS_ID = 14
@@ -178,14 +178,14 @@ def main():
             "导入 detect_trt 失败，请检查 TensorRT/PyCUDA/OpenCV 环境是否正确安装。"
         ) from exc
 
-    engine_path = os.path.join(PROJECT_ROOT, "build", "yolov5s.engine")
-    plugin_path = os.path.join(PROJECT_ROOT, "build", "libmyplugins.so")
+    engine_path = os.path.join(DOG_SXH_ROOT, "build", "yolov5s.engine")
+    plugin_path = os.path.join(DOG_SXH_ROOT, "build", "libmyplugins.so")
     if not os.path.exists(engine_path):
         raise FileNotFoundError(f"未找到TensorRT引擎文件: {engine_path}")
     if not os.path.exists(plugin_path):
         raise FileNotFoundError(f"未找到TensorRT插件文件: {plugin_path}")
 
-    os.chdir(PROJECT_ROOT)
+    os.chdir(DOG_SXH_ROOT)
     detector = Detect_image()
 
     cap = cv2.VideoCapture(args.camera)
