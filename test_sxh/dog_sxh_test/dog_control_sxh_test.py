@@ -5,7 +5,7 @@ import time
 class DogControl:
     def __init__(self):
         # 心脏包 这里的ip地址为上下位机通讯的ip地址 不要随便修改
-        self.__udp_client = UDPClient('192.168.1.103', 43893)
+        self.__udp_client = UDPClient('192.168.1.120', 43893)
         #开始双线程，在后台源源不断执行这个心脏发送
         self.__heart_beat_thread = threading.Thread(target=self.__heart_beat)
         self.__heart_beat_thread.start()
@@ -108,8 +108,13 @@ class DogControl:
         time.sleep(4)
         self.__udp_client.send(0x21010C0A, value=7)
 
-    def revolve_90(self):
+    def revolve_90_r(self):#右转
         self.__udp_client.send(0x21010C0A, value=14)
+        time.sleep(2)
+        self.__udp_client.send(0x21010C0A, value=7)
+
+    def revolve_90_l(self):#左转
+        self.__udp_client.send(0x21010C0A, value=13)
         time.sleep(2)
         self.__udp_client.send(0x21010C0A, value=7)
 
@@ -123,18 +128,6 @@ class DogControl:
     def start_continue(self):
         self.__udp_client.send(0x21010C06, value=-1)
 
-
-
-
-# --------------------------------------走路任务---------------------------------------
-
-
-
-
-
-
-
-# --------------------------------------踢球任务---------------------------------------
 
 
 
