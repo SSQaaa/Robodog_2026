@@ -1,93 +1,71 @@
 import time
-import cv2
-import pycuda.autoinit  # This is needed for initializing CUDA driver
-import numpy as np
-import ctypes
-import tensorrt as trt
-import pycuda.driver as cuda
 
-import threading
-import random
+import cv2
+import numpy as np
+import pycuda.autoinit
+import pycuda.driver as cuda
+import tensorrt as trt
 
 
 INPUT_W = 640
 INPUT_H = 640
 CONF_THRESH = 0.2
 IOU_THRESHOLD = 0.4
-categories = ['1', '2', '3', '4', '5', '6', 'Dashboard', 'blue_barrel', 'orrange_barrel', 'red_barrel', 'yellow_barrel',
-            "blue_ball", "orange_ball", "red_ball", "yellow_ball" , 'yellow_cylinder' , 'red_cylinder'    ]
+
+categories = ["A", "B", "C", "D", "dashboard", "RC", "GC", "ssi"]
+
+# Detection output element count:
+# [x, y, w, h, conf, class_id]
+# If your engine is not this format, only change this value.
+DETECTION_SIZE = 6
+
 
 class YoLov5TRT(object):
     def __init__(self, engine_file_path):
         self.cfx = cuda.Device(0).make_context()
-        stream = cuda.Stream()
-        TRT_LOGGER = trt.Logger(trt.Logger.INFO)
-        runtime = trt.Runtime(TRT_LOGGER)
+        self.stream = cuda.Stream()
 
+        trt_logger = trt.Logger(trt.Logger.INFO)
+        runtime = trt.Runtime(trt_logger)
         with open(engine_file_path, "rb") as f:
-            engine = runtime.deserialize_cuda_engine(f.read())
-        
-        context = engine.create_execution_context()
+            self.engine = runtime.deserialize_cuda_engine(f.read())
 
-        host_inputs = []
-        cuda_inputs = []
-        host_outputs = []
-        cuda_outputs = []
-        bindings = []
+        self.context = self.engine.create_execution_context()
 
-        for binding in engine:
-            size = trt.volume(engine.get_binding_shape(binding)) * engine.max_batch_size
-            dtype = trt.nptype(engine.get_binding_dtype(binding))
+        self.host_inputs = []
+        self.cuda_inputs = []
+        self.host_outputs = []
+        self.cuda_outputs = []
+        self.bindings = []
+
+        for binding in self.engine:
+            size = trt.volume(self.engine.get_binding_shape(binding)) * self.engine.max_batch_size
+            dtype = trt.nptype(self.engine.get_binding_dtype(binding))
             host_mem = cuda.pagelocked_empty(size, dtype)
             cuda_mem = cuda.mem_alloc(host_mem.nbytes)
-            bindings.append(int(cuda_mem))
-            if engine.binding_is_input(binding):
-                host_inputs.append(host_mem)
-                cuda_inputs.append(cuda_mem)
+            self.bindings.append(int(cuda_mem))
+            if self.engine.binding_is_input(binding):
+                self.host_inputs.append(host_mem)
+                self.cuda_inputs.append(cuda_mem)
             else:
-                host_outputs.append(host_mem)
-                cuda_outputs.append(cuda_mem)
-
-        self.stream = stream
-        self.context = context
-        self.engine = engine
-        self.host_inputs = host_inputs
-        self.cuda_inputs = cuda_inputs
-        self.host_outputs = host_outputs
-        self.cuda_outputs = cuda_outputs
-        self.bindings = bindings
-
-    # 释放引擎，释放GPU显存，释放CUDA流
-    def __del__(self):
-        print("释放内存")
+                self.host_outputs.append(host_mem)
+                self.cuda_outputs.append(cuda_mem)
 
     def infer(self, image_raw):
-        threading.Thread.__init__(self)
         self.cfx.push()
         try:
-            stream = self.stream
-            context = self.context
-            engine = self.engine
-            host_inputs = self.host_inputs
-            cuda_inputs = self.cuda_inputs
-            host_outputs = self.host_outputs
-            cuda_outputs = self.cuda_outputs
-            bindings = self.bindings
-            input_image, image_raw, origin_h, origin_w = self.preprocess_image(
-                image_raw
-            )
-            np.copyto(host_inputs[0], input_image.ravel())
-            start = time.time()
-            cuda.memcpy_htod_async(cuda_inputs[0], host_inputs[0], stream)
-            context.execute_async(bindings=bindings, stream_handle=stream.handle)
-            cuda.memcpy_dtoh_async(host_outputs[0], cuda_outputs[0], stream)
-            stream.synchronize()
-            end = time.time()
-            output = host_outputs[0]
-            result_boxes, result_scores, result_classid = self.post_process(
-                output, origin_h, origin_w
-            )
+            input_image, image_raw, origin_h, origin_w = self.preprocess_image(image_raw)
+            np.copyto(self.host_inputs[0], input_image.ravel())
 
+            start = time.time()
+            cuda.memcpy_htod_async(self.cuda_inputs[0], self.host_inputs[0], self.stream)
+            self.context.execute_async(bindings=self.bindings, stream_handle=self.stream.handle)
+            cuda.memcpy_dtoh_async(self.host_outputs[0], self.cuda_outputs[0], self.stream)
+            self.stream.synchronize()
+            end = time.time()
+
+            output = self.host_outputs[0]
+            result_boxes, result_scores, result_classid = self.post_process(output, origin_h, origin_w)
             return image_raw, result_boxes, result_scores, result_classid, end - start
         finally:
             self.cfx.pop()
@@ -96,8 +74,9 @@ class YoLov5TRT(object):
         self.cfx.pop()
 
     def preprocess_image(self, image_raw):
-        h, w, c = image_raw.shape
+        h, w, _ = image_raw.shape
         image = cv2.cvtColor(image_raw, cv2.COLOR_BGR2RGB)
+
         r_w = INPUT_W / w
         r_h = INPUT_H / h
         if r_h > r_w:
@@ -112,12 +91,10 @@ class YoLov5TRT(object):
             tx1 = int((INPUT_W - tw) / 2)
             tx2 = INPUT_W - tw - tx1
             ty1 = ty2 = 0
+
         image = cv2.resize(image, (tw, th))
-        image = cv2.copyMakeBorder(
-            image, ty1, ty2, tx1, tx2, cv2.BORDER_CONSTANT, (128, 128, 128)
-        )
-        image = image.astype(np.float32)
-        image /= 255.0
+        image = cv2.copyMakeBorder(image, ty1, ty2, tx1, tx2, cv2.BORDER_CONSTANT, (128, 128, 128))
+        image = image.astype(np.float32) / 255.0
         image = np.transpose(image, [2, 0, 1])
         image = np.expand_dims(image, axis=0)
         image = np.ascontiguousarray(image)
@@ -127,6 +104,7 @@ class YoLov5TRT(object):
         y = np.zeros_like(x)
         r_w = INPUT_W / origin_w
         r_h = INPUT_H / origin_h
+
         if r_h > r_w:
             y[:, 0] = x[:, 0] - x[:, 2] / 2
             y[:, 2] = x[:, 0] + x[:, 2] / 2
@@ -147,10 +125,11 @@ class YoLov5TRT(object):
         y1 = boxes[:, 1]
         x2 = boxes[:, 2]
         y2 = boxes[:, 3]
+
         areas = (y2 - y1 + 1) * (x2 - x1 + 1)
-        scores = scores
         keep = []
         index = scores.argsort()[::-1]
+
         while index.size > 0:
             i = index[0]
             keep.append(i)
@@ -162,7 +141,6 @@ class YoLov5TRT(object):
 
             w = np.maximum(0, x22 - x11 + 1)
             h = np.maximum(0, y22 - y11 + 1)
-
             overlaps = w * h
             ious = overlaps / (areas[i] + areas[index[1:]] - overlaps)
 
@@ -173,16 +151,26 @@ class YoLov5TRT(object):
 
     def post_process(self, output, origin_h, origin_w):
         num = int(output[0])
-        pred = np.reshape(output[1:], (-1, 38))[:num, :]
+        if num <= 0:
+            return np.empty((0, 4), dtype=np.float32), np.empty((0,), dtype=np.float32), np.empty((0,), dtype=np.float32)
+
+        raw = output[1:]
+        valid_len = (len(raw) // DETECTION_SIZE) * DETECTION_SIZE
+        pred = np.reshape(raw[:valid_len], (-1, DETECTION_SIZE))
+        pred = pred[:num, :]
+
         boxes = pred[:, :4]
         scores = pred[:, 4]
         classid = pred[:, 5]
-        si = scores > CONF_THRESH
-        boxes = boxes[si, :]
-        scores = scores[si]
-        classid = classid[si]
+
+        keep_score = scores > CONF_THRESH
+        boxes = boxes[keep_score, :]
+        scores = scores[keep_score]
+        classid = classid[keep_score]
+
         boxes = self.xywh2xyxy(origin_h, origin_w, boxes)
         indices = self.nms(boxes, scores, IOU_THRESHOLD)
+
         result_boxes = boxes[indices, :]
         result_scores = scores[indices]
         result_classid = classid[indices]
