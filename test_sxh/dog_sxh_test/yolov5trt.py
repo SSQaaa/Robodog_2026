@@ -1,8 +1,8 @@
 import time
+import sys
 
 import cv2
 import numpy as np
-import pycuda.autoinit
 import pycuda.driver as cuda
 import tensorrt as trt
 
@@ -10,20 +10,25 @@ import tensorrt as trt
 INPUT_W = 640
 INPUT_H = 640
 CONF_THRESH = 0.2
+CONF_THRESH_DASHBOARD = 0.1
 IOU_THRESHOLD = 0.4
 
-categories = ["A", "B", "C", "D", "dashboard", "RC", "GC", "ssi"]
+categories = ["A", "B", "C", "D", "GC", "RC", "dashboard", "ssi"]
 
-# Detection output element count:
-# [x, y, w, h, conf, class_id]
-# If your engine is not this format, only change this value.
-DETECTION_SIZE = 6
+# Detection output element count for current engine.
+# For this engine, each detection row length is 38.
+DETECTION_SIZE = 38
+DETECTION_SIZE_CANDIDATES = [6, 13, 38]
+DEBUG_DETECTION_SIZE = ("--debug-size" in sys.argv)
+DEBUG_PRINT_EVERY = 15
 
 
 class YoLov5TRT(object):
     def __init__(self, engine_file_path):
+        cuda.init()
         self.cfx = cuda.Device(0).make_context()
         self.stream = cuda.Stream()
+        self.debug_frame_count = 0
 
         trt_logger = trt.Logger(trt.Logger.INFO)
         runtime = trt.Runtime(trt_logger)
@@ -72,6 +77,7 @@ class YoLov5TRT(object):
 
     def destroy(self):
         self.cfx.pop()
+        self.cfx.detach()
 
     def preprocess_image(self, image_raw):
         h, w, _ = image_raw.shape
@@ -149,7 +155,31 @@ class YoLov5TRT(object):
 
         return keep
 
+    def nms_classwise(self, boxes, scores, classid, iou_threshold=IOU_THRESHOLD):
+        keep_all = []
+        classid_int = classid.astype(np.int32)
+        unique_cls = np.unique(classid_int)
+
+        for cid in unique_cls:
+            idx = np.where(classid_int == cid)[0]
+            if idx.size == 0:
+                continue
+            sub_keep = self.nms(boxes[idx, :], scores[idx], iou_threshold)
+            keep_all.extend(idx[sub_keep].tolist())
+
+        if len(keep_all) == 0:
+            return np.empty((0,), dtype=np.int32)
+
+        keep_all = np.array(keep_all, dtype=np.int32)
+        order = scores[keep_all].argsort()[::-1]
+        return keep_all[order]
+
     def post_process(self, output, origin_h, origin_w):
+        if DEBUG_DETECTION_SIZE:
+            self.debug_frame_count += 1
+            if self.debug_frame_count % DEBUG_PRINT_EVERY == 1:
+                self._debug_detection_size(output)
+
         num = int(output[0])
         if num <= 0:
             return np.empty((0, 4), dtype=np.float32), np.empty((0,), dtype=np.float32), np.empty((0,), dtype=np.float32)
@@ -157,21 +187,69 @@ class YoLov5TRT(object):
         raw = output[1:]
         valid_len = (len(raw) // DETECTION_SIZE) * DETECTION_SIZE
         pred = np.reshape(raw[:valid_len], (-1, DETECTION_SIZE))
+        if num > pred.shape[0]:
+            num = pred.shape[0]
         pred = pred[:num, :]
 
         boxes = pred[:, :4]
         scores = pred[:, 4]
         classid = pred[:, 5]
 
-        keep_score = scores > CONF_THRESH
+        valid_class = (classid >= 0) & (classid < len(categories))
+        boxes = boxes[valid_class, :]
+        scores = scores[valid_class]
+        classid = classid[valid_class]
+
+        classid_int = classid.astype(np.int32)
+        score_thresh = np.where(classid_int == 6, CONF_THRESH_DASHBOARD, CONF_THRESH)
+        keep_score = scores > score_thresh
         boxes = boxes[keep_score, :]
         scores = scores[keep_score]
         classid = classid[keep_score]
 
         boxes = self.xywh2xyxy(origin_h, origin_w, boxes)
-        indices = self.nms(boxes, scores, IOU_THRESHOLD)
+        indices = self.nms_classwise(boxes, scores, classid, IOU_THRESHOLD)
 
         result_boxes = boxes[indices, :]
         result_scores = scores[indices]
         result_classid = classid[indices]
         return result_boxes, result_scores, result_classid
+
+    def _debug_detection_size(self, output):
+        raw = output[1:]
+        num_raw = int(output[0])
+        print(
+            "[debug_size] num_raw={}, raw_len={}, now_DETECTION_SIZE={}".format(
+                num_raw, len(raw), DETECTION_SIZE
+            )
+        )
+
+        for ds in DETECTION_SIZE_CANDIDATES:
+            rows = len(raw) // ds
+            if rows <= 0:
+                print("[debug_size] ds={} rows=0 skip".format(ds))
+                continue
+
+            pred = np.reshape(raw[: rows * ds], (-1, ds))
+            valid_num = min(max(num_raw, 0), pred.shape[0])
+            pred = pred[:valid_num, :]
+
+            if pred.shape[0] == 0:
+                print("[debug_size] ds={} rows={} valid_num=0 skip".format(ds, rows))
+                continue
+
+            if pred.shape[1] < 6:
+                print("[debug_size] ds={} columns<6 skip".format(ds))
+                continue
+
+            score = pred[:, 4]
+            cid = pred[:, 5]
+            score_ok = float(np.mean((score >= 0.0) & (score <= 1.0)))
+            cid_int = float(np.mean(np.abs(cid - np.round(cid)) < 1e-3))
+            cid_range = float(np.mean((cid >= 0.0) & (cid < float(len(categories)))))
+
+            print(
+                "[debug_size] ds={} rows={} used={} score01={:.3f} cid_int={:.3f} cid_in_range={:.3f}".format(
+                    ds, rows, valid_num, score_ok, cid_int, cid_range
+                )
+            )

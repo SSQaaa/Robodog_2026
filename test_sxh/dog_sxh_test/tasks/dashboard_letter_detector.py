@@ -1,4 +1,4 @@
-﻿import ctypes
+import ctypes
 import math
 import sys
 
@@ -9,9 +9,9 @@ import numpy as np
 
 # Config (hard-coded)
 ENGINE_PATH = r"/home/ysc/Desktop/Robodog_2026/test_sjh/best0330.engine"
-PLUGIN_PATH = r"/home/ysc/Desktop/Robodog_2026/test_sxh/dog_sxh_test/build/libmyplugins.so"
+PLUGIN_PATH = r"/home/ysc/Desktop/Robodog_2026/test_sjh/TRTX/yolov5/build/libmyplugins.so"
 
-CAMERA_INDEX = 2
+CAMERA_INDEX = 0
 FRAME_WIDTH = 640
 FRAME_HEIGHT = 640
 SHOW_STREAM_DEFAULT = False
@@ -20,9 +20,9 @@ WINDOW_NAME = "robotdog_stream"
 ROOT_DIR = r"/home/ysc/Desktop/Robodog_2026/test_sxh/dog_sxh_test"
 sys.path.insert(0, ROOT_DIR)
 from yolov5trt import YoLov5TRT
-DASHBOARD_ID = 4
+DASHBOARD_ID = 6
 SSI_ID = 7
-CLASS_NAMES = ["A", "B", "C", "D", "dashboard", "RC", "GC", "ssi"]
+CLASS_NAMES = ["A", "B", "C", "D", "GC", "RC", "dashboard", "ssi"]
 
 POINTER_THRESHOLD = 118
 NORMAL_ANGLE_MIN = 120.0
