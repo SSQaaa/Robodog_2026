@@ -18,9 +18,10 @@ categories = ["A", "B", "C", "D", "GC", "RC", "dashboard", "ssi"]
 # Detection output element count for current engine.
 # For this engine, each detection row length is 38.
 DETECTION_SIZE = 38
-DETECTION_SIZE_CANDIDATES = [6, 13, 38]
-DEBUG_DETECTION_SIZE = ("--debug-size" in sys.argv)
-DEBUG_PRINT_EVERY = 15
+# 验证哪一个ds值才是正确的（临时注释保留）
+# DETECTION_SIZE_CANDIDATES = [6, 13, 38]
+# DEBUG_DETECTION_SIZE = ("--debug-size" in sys.argv)
+# DEBUG_PRINT_EVERY = 15
 
 
 class YoLov5TRT(object):
@@ -175,10 +176,11 @@ class YoLov5TRT(object):
         return keep_all[order]
 
     def post_process(self, output, origin_h, origin_w):
-        if DEBUG_DETECTION_SIZE:
-            self.debug_frame_count += 1
-            if self.debug_frame_count % DEBUG_PRINT_EVERY == 1:
-                self._debug_detection_size(output)
+        # 验证哪一个ds值才是正确的（临时注释保留）
+        # if DEBUG_DETECTION_SIZE:
+        #     self.debug_frame_count += 1
+        #     if self.debug_frame_count % DEBUG_PRINT_EVERY == 1:
+        #         self._debug_detection_size(output)
 
         num = int(output[0])
         if num <= 0:
@@ -195,10 +197,11 @@ class YoLov5TRT(object):
         scores = pred[:, 4]
         classid = pred[:, 5]
 
-        valid_class = (classid >= 0) & (classid < len(categories))
-        boxes = boxes[valid_class, :]
-        scores = scores[valid_class]
-        classid = classid[valid_class]
+        # 用作过滤非法id（临时注释保留）
+        # valid_class = (classid >= 0) & (classid < len(categories))
+        # boxes = boxes[valid_class, :]
+        # scores = scores[valid_class]
+        # classid = classid[valid_class]
 
         classid_int = classid.astype(np.int32)
         score_thresh = np.where(classid_int == 6, CONF_THRESH_DASHBOARD, CONF_THRESH)
