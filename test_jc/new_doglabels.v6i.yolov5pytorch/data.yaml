@@ -1,0 +1,12 @@
+train: "/home/ysc/Desktop/Robodog_2026/test_jc/new_doglabels.v6i.yolov5pytorch/train/images/"
+val: "/home/ysc/Desktop/Robodog_2026/test_jc/new_doglabels.v6i.yolov5pytorch/valid/images/"
+test: "/home/ysc/Desktop/Robodog_2026/test_jc/new_doglabels.v6i.yolov5pytorch/test/"
+nc: 18
+names: ['1', '2', '3', '4', '5', '6', 'red_barrel', 'yellow_barrel', 'blue_barrel', 'orange_barrel', 'red_ball', 'yellow_ball', 'blue_ball', 'orange_ball', 'Dashboard', 'ssi', 'yellow_cylinder', 'red_cylinder']
+
+roboflow:
+  workspace: ndlb
+  project: new_doglabels-ze5om
+  version: 6
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/ndlb/new_doglabels-ze5om/dataset/6
