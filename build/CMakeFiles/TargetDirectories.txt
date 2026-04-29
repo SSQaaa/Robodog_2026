@@ -1,0 +1,3 @@
+/home/ysc/Desktop/orbbec_pybind/build/CMakeFiles/rebuild_cache.dir
+/home/ysc/Desktop/orbbec_pybind/build/CMakeFiles/orbbec_native.dir
+/home/ysc/Desktop/orbbec_pybind/build/CMakeFiles/edit_cache.dir
