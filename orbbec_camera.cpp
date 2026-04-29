@@ -7,17 +7,21 @@
 
 #include <algorithm>
 #include <atomic>
-#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <mutex>
-#include <stdexcept>
 #include <thread>
 #include <utility>
 #include <vector>
 
 namespace py = pybind11;
+
+namespace {
+// Set this to false when the camera is mounted upright.
+const bool kRotateFrames180 = true;
+}
 
 class OrbbecCamera {
 public:
@@ -26,7 +30,8 @@ public:
           depth_width_(0),
           depth_height_(0),
           color_width_(0),
-          color_height_(0) {}
+          color_height_(0),
+          rotate_180_(kRotateFrames180) {}
 
     ~OrbbecCamera() {
         stop();
@@ -50,6 +55,8 @@ public:
         // config_->setAlignMode(OB_ALIGN_D2C_SW_MODE);
 
         pipe_.start(config_);
+
+        printCameraIntrinsics();
 
         running_ = true;
         capture_thread_ = std::thread(&OrbbecCamera::captureLoop, this);
@@ -78,6 +85,38 @@ public:
     std::pair<int, int> get_color_size() {
         std::lock_guard<std::mutex> lock(mtx_);
         return {color_width_, color_height_};
+    }
+
+    bool is_rotate_180_enabled() const {
+        return rotate_180_;
+    }
+
+    py::dict get_color_intrinsics() {
+        auto cameraParam = pipe_.getCameraParam();
+        auto intr = cameraParam.rgbIntrinsic;
+        return makeIntrinsicsDict(
+            intr.fx,
+            intr.fy,
+            intr.cx,
+            intr.cy,
+            intr.width,
+            intr.height,
+            rotate_180_
+        );
+    }
+
+    py::dict get_depth_intrinsics() {
+        auto cameraParam = pipe_.getCameraParam();
+        auto intr = cameraParam.depthIntrinsic;
+        return makeIntrinsicsDict(
+            intr.fx,
+            intr.fy,
+            intr.cx,
+            intr.cy,
+            intr.width,
+            intr.height,
+            rotate_180_
+        );
     }
 
     py::object get_color_frame() {
@@ -168,45 +207,14 @@ private:
             std::vector<uint8_t> new_color_bgr;
             int new_color_w = 0;
             int new_color_h = 0;
-/*
             if (depthFrame) {
-                new_depth_w = depthFrame->width();
-                new_depth_h = depthFrame->height();
-
-                auto *depth_ptr = reinterpret_cast<uint16_t *>(depthFrame->data());
-                if (depth_ptr && new_depth_w > 0 && new_depth_h > 0) {
-                    new_depth.assign(depth_ptr, depth_ptr + new_depth_w * new_depth_h);
-                }
-            }
-*/
-
-            //////////////////////////////////  rotate180 ///////////////////////////
-            if (depthFrame) {
-                new_depth_w = depthFrame->width();
-                new_depth_h = depthFrame->height();
-            
-                auto *depth_ptr = reinterpret_cast<uint16_t *>(depthFrame->data());
-            
-                if (depth_ptr && new_depth_w > 0 && new_depth_h > 0) {
-                    cv::Mat depth_raw(new_depth_h, new_depth_w, CV_16UC1, depth_ptr);
-                    cv::Mat depth_rotated;
-            
-                    // ? 深度图也旋转180°
-                    cv::rotate(depth_raw, depth_rotated, cv::ROTATE_180);
-            
-                    new_depth.assign(
-                        reinterpret_cast<uint16_t *>(depth_rotated.data),
-                        reinterpret_cast<uint16_t *>(depth_rotated.data) + new_depth_w * new_depth_h
-                    );
-                }
+                extractDepthFrame(depthFrame, new_depth, new_depth_w, new_depth_h);
             }
 
             if (colorFrame) {
                 cv::Mat bgr = decodeColorFrame(colorFrame);
                 if (!bgr.empty()) {
-                    //////////////////////////////////  rotate180 ///////////////////////////
-                    cv::rotate(bgr, bgr, cv::ROTATE_180);
-                    
+                    bgr = rotateFrameIfNeeded(bgr);
                     new_color_w = bgr.cols;
                     new_color_h = bgr.rows;
                     new_color_bgr.assign(bgr.data, bgr.data + bgr.total() * bgr.elemSize());
@@ -229,6 +237,34 @@ private:
                 }
             }
         }
+    }
+
+    void extractDepthFrame(const std::shared_ptr<ob::DepthFrame> &frame,
+                           std::vector<uint16_t> &depth,
+                           int &width,
+                           int &height) {
+        width = frame->width();
+        height = frame->height();
+
+        auto *depth_ptr = reinterpret_cast<uint16_t *>(frame->data());
+        if (!depth_ptr || width <= 0 || height <= 0) {
+            return;
+        }
+
+        cv::Mat raw(height, width, CV_16UC1, depth_ptr);
+        cv::Mat prepared = rotateFrameIfNeeded(raw);
+        const auto *prepared_ptr = reinterpret_cast<const uint16_t *>(prepared.data);
+        depth.assign(prepared_ptr, prepared_ptr + width * height);
+    }
+
+    cv::Mat rotateFrameIfNeeded(const cv::Mat &frame) {
+        if (!rotate_180_) {
+            return frame;
+        }
+
+        cv::Mat rotated;
+        cv::rotate(frame, rotated, cv::ROTATE_180);
+        return rotated;
     }
 
     cv::Mat decodeColorFrame(const std::shared_ptr<ob::ColorFrame> &frame) {
@@ -273,6 +309,81 @@ private:
         return bgr;
     }
 
+    py::dict makeIntrinsicsDict(double fx,
+                                double fy,
+                                double cx,
+                                double cy,
+                                int width,
+                                int height,
+                                bool rotated_180) {
+        double used_cx = cx;
+        double used_cy = cy;
+
+        /*
+         * The SDK returns intrinsics for the original, unrotated image.
+         * This class currently rotates both color and depth frames by 180 degrees
+         * before returning them to Python.
+         *
+         * A pixel at (u, v) in the original image becomes:
+         *     u_rot = width  - 1 - u
+         *     v_rot = height - 1 - v
+         *
+         * The optical center must be transformed in the same way:
+         *     cx_rot = width  - 1 - cx
+         *     cy_rot = height - 1 - cy
+         *
+         * fx and fy do not change after a 180 degree rotation.
+         *
+         * If the camera is later mounted upright, set rotate_180_ to false.
+         * Then the returned cx/cy will be the raw SDK values.
+         */
+        if (rotated_180) {
+            used_cx = static_cast<double>(width) - 1.0 - cx;
+            used_cy = static_cast<double>(height) - 1.0 - cy;
+        }
+
+        py::dict d;
+        d["fx"] = fx;
+        d["fy"] = fy;
+        d["cx"] = used_cx;
+        d["cy"] = used_cy;
+        d["raw_cx"] = cx;
+        d["raw_cy"] = cy;
+        d["width"] = width;
+        d["height"] = height;
+        d["rotated_180"] = rotated_180;
+        return d;
+    }
+
+    void printCameraIntrinsics() {
+        auto color = get_color_intrinsics();
+        auto depth = get_depth_intrinsics();
+
+        std::cout << "[Color Intrinsics used by Python] "
+                  << "fx=" << color["fx"].cast<double>()
+                  << ", fy=" << color["fy"].cast<double>()
+                  << ", cx=" << color["cx"].cast<double>()
+                  << ", cy=" << color["cy"].cast<double>()
+                  << ", raw_cx=" << color["raw_cx"].cast<double>()
+                  << ", raw_cy=" << color["raw_cy"].cast<double>()
+                  << ", width=" << color["width"].cast<int>()
+                  << ", height=" << color["height"].cast<int>()
+                  << ", rotated_180=" << color["rotated_180"].cast<bool>()
+                  << std::endl;
+
+        std::cout << "[Depth Intrinsics used by Python] "
+                  << "fx=" << depth["fx"].cast<double>()
+                  << ", fy=" << depth["fy"].cast<double>()
+                  << ", cx=" << depth["cx"].cast<double>()
+                  << ", cy=" << depth["cy"].cast<double>()
+                  << ", raw_cx=" << depth["raw_cx"].cast<double>()
+                  << ", raw_cy=" << depth["raw_cy"].cast<double>()
+                  << ", width=" << depth["width"].cast<int>()
+                  << ", height=" << depth["height"].cast<int>()
+                  << ", rotated_180=" << depth["rotated_180"].cast<bool>()
+                  << std::endl;
+    }
+
 private:
     ob::Pipeline pipe_;
     std::shared_ptr<ob::Config> config_;
@@ -288,4 +399,6 @@ private:
     std::vector<uint8_t> color_bgr_;
     int color_width_;
     int color_height_;
+
+    bool rotate_180_;
 };
