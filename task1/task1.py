@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-4m × 1.7m 锥桶避障穿越任务（平移绕过 + 边界保护）
+4m × 1.7m 锥桶避障穿越任务（动态平移 + 目标锁定 + 边界保护）
 前提：已用手柄让机器狗站立，狗位于宽度中间（0.85m处）。
-逻辑：直行 → 遇锥桶 → 横向平移绕过 → 累计前进4米停止。
+逻辑：直行 → 遇锥桶 → 锁定该锥桶 → 持续同方向平移直到锥桶安全 → 恢复直行。
      若横向偏移超过0.6m，自动向中心平移修正。
 """
 
@@ -43,22 +43,21 @@ DEPTH_HISTORY_LEN = 5
 TARGET_DISTANCE = 4.0       # 前进总距离（米）
 FIELD_WIDTH = 1.7           # 场地宽（米）
 DOG_WIDTH = 0.40
-SAFE_DISTANCE = 1.5         # 提前避障距离（米）
+SAFE_DISTANCE = 1.5         # 开始避障的前向距离（米）
 LATERAL_THRESHOLD = 0.35    # 横向判定正前方的阈值（米）
 CRITICAL_DISTANCE = 0.6     # 紧急后退距离
 
 # --- 运动控制速度值 ---
 VX_NOMINAL = 8000          # 正常直行
-VY_SHIFT = 25000            # 平移速度（正值右移）
-SHIFT_DURATION = 0.4        # 单次平移持续时间（秒），不宜过大
+VY_SHIFT = 25000            # 平移速度基值（正值右移）
+SHIFT_DURATION = 0.4        # 单次平移基础持续时间（秒），实际会循环检查
 
 # --- 真实速度标定（必填：你的实测速度）---
 REAL_SPEED_VX = 0.5         # 米/秒，vx=12000 对应速度
-# 横向平移速度标定（vy=30000 时约 0.5 m/s，此处按比例估算）
 LATERAL_SPEED_SCALE = 0.5 / 30000.0  # 每个 vy 单位对应的真实横向速度 (m/s)
 
 # --- 边界保护 ---
-MAX_LATERAL_OFFSET = 0.6    # 最大允许横向偏移（米），距中心±0.6m
+MAX_LATERAL_OFFSET = 0.6    # 最大允许横向偏移（米）
 BOUNDARY_CORRECTION_DURATION = 0.4   # 强制修正平移时间
 
 # --- 控制周期 ---
@@ -136,7 +135,7 @@ class RobotMover:
         self.stop()
 
 # =========================
-# 工具函数（同前）
+# 工具函数
 # =========================
 class DepthSmoother:
     def __init__(self, max_len=5):
@@ -209,28 +208,11 @@ def draw_detection(frame, box, cls_id, conf, depth_mm, valid_count, pos_3d=None)
                     (x1, min(frame.shape[0] - 5, y2 + 40)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
 
-# =========================
-# 避障决策（方向已修正！）
-# =========================
-def compute_avoidance_action(x, z,
-                             safe_dist=SAFE_DISTANCE,
-                             critical_dist=CRITICAL_DISTANCE,
-                             lat_thresh=LATERAL_THRESHOLD):
-    if z > safe_dist:
-        return VX_NOMINAL, 0, 0, "forward"
-    elif critical_dist < z <= safe_dist:
-        if abs(x) < lat_thresh:
-            if x >= 0:
-                return 0, -VY_SHIFT, 0, "shift_left"    # 锥桶在右，向左绕
-            else:
-                return 0, VY_SHIFT, 0, "shift_right"    # 锥桶在左，向右绕
-        else:
-            return VX_NOMINAL, 0, 0, "forward_offcenter"
-    else:
-        if x >= 0:
-            return -6000, -VY_SHIFT, 0, "back_left"
-        else:
-            return -6000, VY_SHIFT, 0, "back_right"
+def get_avoid_direction(x, z, safe_dist=SAFE_DISTANCE, lat_thresh=LATERAL_THRESHOLD):
+    """返回 0（无需避障）、1（向右平移）、-1（向左平移）"""
+    if z > safe_dist or abs(x) >= lat_thresh:
+        return 0
+    return 1 if x < 0 else -1   # x<0 障碍在左，需向右平移 (vy > 0)
 
 # =========================
 # 主程序
@@ -257,7 +239,9 @@ def main():
 
     smoother = DepthSmoother(max_len=DEPTH_HISTORY_LEN)
     forward_distance = 0.0
-    lateral_offset = 0.0        # 横向偏移（正右负左，单位米）
+    lateral_offset = 0.0
+    locked_cone_id = None
+    lock_action = 0             # 1: right, -1: left
     shift_active = False
     shift_end_time = 0.0
     frame_id = 0
@@ -297,58 +281,84 @@ def main():
                                                            DEPTH_FX, DEPTH_FY, DEPTH_CX, DEPTH_CY)
                         pos_3d = (x_m, y_m, z_m)
                         if cls_id == 7:
-                            cones_3d.append({'x': x_m, 'y': y_m, 'z': z_m, 'depth': stable_depth})
+                            cone_id = f"{x_m:.3f}_{z_m:.3f}_{y_m:.3f}"
+                            cones_3d.append({'x': x_m, 'y': y_m, 'z': z_m,
+                                             'depth': stable_depth, 'id': cone_id})
                 draw_detection(frame, color_box, cls_id, conf, stable_depth, valid_count, pos_3d)
 
-            # ========== 运动决策 ==========
+            # ========== 运动决策（目标锁定版） ==========
             if shift_active:
-                # 正在执行平移，发送指令并更新横向偏移
                 if time.time() < shift_end_time:
                     mover.move(0, saved_vy, 0, last_time=CONTROL_PERIOD)
-                    # 估算横向位移（根据vy符号和持续时间）
                     lateral_offset += (saved_vy * LATERAL_SPEED_SCALE) * CONTROL_PERIOD
                     print(f"[Move] shifting, lateral_offset={lateral_offset:.3f}m")
+                    continue
                 else:
                     shift_active = False
-            else:
-                # 优先检查边界保护
-                if abs(lateral_offset) > MAX_LATERAL_OFFSET:
-                    # 超出边界安全范围，强制向中心平移
-                    vy = -VY_SHIFT if lateral_offset > 0 else VY_SHIFT
-                    vx = 0
-                    action = "boundary_correction"
-                    shift_active = True
-                    shift_end_time = time.time() + BOUNDARY_CORRECTION_DURATION
-                    saved_vy = vy
-                    print(f"[Boundary] lateral_offset={lateral_offset:.2f}, correcting...")
-                else:
-                    # 正常避障决策
-                    if cones_3d:
-                        nearest = min(cones_3d, key=lambda c: c['z'])
-                        x, y, z = nearest['x'], nearest['y'], nearest['z']
-                        vx, vy, vz, action = compute_avoidance_action(x, z)
-                        print(f"[Avoid] cone x={x:.3f} z={z:.3f} -> {action} vx={vx} vy={vy}")
-                    else:
-                        vx, vy, vz, action = VX_NOMINAL, 0, 0, "forward_no_cone"
-                        print("[Avoid] no cone, straight")
+                    locked_cone_id = None
+                    lock_action = 0
 
-                    if abs(vy) > 0:
+            # 边界保护（最高优先级）
+            if abs(lateral_offset) > MAX_LATERAL_OFFSET:
+                vy = -VY_SHIFT if lateral_offset > 0 else VY_SHIFT
+                shift_active = True
+                shift_end_time = time.time() + BOUNDARY_CORRECTION_DURATION
+                saved_vy = vy
+                locked_cone_id = None
+                lock_action = 0
+                mover.move(0, vy, 0, last_time=CONTROL_PERIOD)
+                print(f"[Boundary] correcting, lateral_offset={lateral_offset:.2f}")
+                continue
+
+            # 正常避障逻辑
+            if cones_3d:
+                # 如果有锁定目标，检查它是否依然需要避让
+                if locked_cone_id is not None:
+                    locked_cone = next((c for c in cones_3d if c['id'] == locked_cone_id), None)
+                    if locked_cone and get_avoid_direction(locked_cone['x'], locked_cone['z'], SAFE_DISTANCE, LATERAL_THRESHOLD) != 0:
+                        # 继续锁定，同方向平移
                         shift_active = True
                         shift_end_time = time.time() + SHIFT_DURATION
-                        saved_vy = vy
-                        # 第一次发送移动命令，并记录偏移量将在后续循环中更新
-                        mover.move(0, vy, 0, last_time=CONTROL_PERIOD)
-                        lateral_offset += (vy * LATERAL_SPEED_SCALE) * CONTROL_PERIOD
-                        print(f"[Move] start shift: vy={vy}, lateral_offset={lateral_offset:.3f}")
+                        saved_vy = VY_SHIFT if lock_action == 1 else -VY_SHIFT
+                        mover.move(0, saved_vy, 0, last_time=CONTROL_PERIOD)
+                        lateral_offset += (saved_vy * LATERAL_SPEED_SCALE) * CONTROL_PERIOD
+                        print(f"[Avoid] keep avoiding locked cone x={locked_cone['x']:.3f} z={locked_cone['z']:.3f}")
+                        continue
                     else:
-                        mover.move(vx, 0, 0, last_time=CONTROL_PERIOD)
-                        if vx > 0:
-                            forward_distance += REAL_SPEED_VX * CONTROL_PERIOD
-                        elif vx < 0:
-                            forward_distance -= REAL_SPEED_VX * CONTROL_PERIOD
-                        print(f"[Move] straight vx={vx}, total forward: {forward_distance:.3f}m")
+                        # 锁定目标已安全，解除
+                        locked_cone_id = None
+                        lock_action = 0
 
-            # 显示与退出
+                # 无锁定，选择最近的需要避障的锥桶
+                nearest = min(cones_3d, key=lambda c: c['z'])
+                direction = get_avoid_direction(nearest['x'], nearest['z'], SAFE_DISTANCE, LATERAL_THRESHOLD)
+                if direction != 0:
+                    locked_cone_id = nearest['id']
+                    lock_action = direction
+                    shift_active = True
+                    shift_end_time = time.time() + SHIFT_DURATION
+                    saved_vy = VY_SHIFT if direction == 1 else -VY_SHIFT
+                    mover.move(0, saved_vy, 0, last_time=CONTROL_PERIOD)
+                    lateral_offset += (saved_vy * LATERAL_SPEED_SCALE) * CONTROL_PERIOD
+                    print(f"[Avoid] start avoiding cone x={nearest['x']:.3f} z={nearest['z']:.3f}, direction={'right' if direction>0 else 'left'}")
+                    continue
+                else:
+                    # 锥桶已偏出或太远，直行
+                    vx = VX_NOMINAL
+                    action = "forward_cone_safe"
+            else:
+                vx = VX_NOMINAL
+                action = "forward_no_cone"
+
+            # 直行
+            mover.move(vx, 0, 0, last_time=CONTROL_PERIOD)
+            if vx > 0:
+                forward_distance += REAL_SPEED_VX * CONTROL_PERIOD
+            elif vx < 0:
+                forward_distance -= REAL_SPEED_VX * CONTROL_PERIOD
+            print(f"[Move] straight vx={vx}, total forward: {forward_distance:.3f}m, lateral_offset={lateral_offset:.3f}m")
+
+            # 显示
             cv2.imshow(WINDOW_NAME, frame)
             key = cv2.waitKey(1)
             if key == 27 or key == ord('q'):
