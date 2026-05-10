@@ -7,8 +7,8 @@ Use:Inverse kinematics algorithm for a three link manipulator(三连杆接机械
 import math
 
 
-def Arm():
-    
+def Arm(x=None, y=None, theta_deg=0):
+
     pi = 3.14
 
     # Define the length of each link
@@ -19,9 +19,11 @@ def Arm():
 
     # Define the end-effector position and orientation
     # 定义末端关节的位置为x,y，单位为毫米，姿态为theta（即 L3与X轴的夹角,这里设置为0 ），单位为弧度。这math.radians函数将角度转换为弧度
-    x = int(input("x:"))
-    y = int(input("y:"))
-    theta = math.radians(0)
+    if x is None:
+        x = int(input("x:"))
+    if y is None:
+        y = int(input("y:"))
+    theta = math.radians(theta_deg)
 
     # Calculate the intermediate position
     # 计算中间位置Bx,By，即第二个关节的位置。这里用三角函数和末端关节的位置和姿态来求解
@@ -55,6 +57,7 @@ def Arm():
     # Print the results in radians and degrees
     # 分别显示弧度和角度。用math.degrees函数将弧度转换为角度
     print("-------------------------")
+    print("theta = ", theta_deg)
     print("5 = ", int(math.degrees(q1)))
     print("4 = ", int(math.degrees(q2)))
     print("3 = ", int(math.degrees(q3)))
