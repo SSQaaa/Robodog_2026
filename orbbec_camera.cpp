@@ -21,6 +21,7 @@ namespace py = pybind11;
 namespace {
 // Set this to false when the camera is mounted upright.
 const bool kRotateFrames180 = true;
+const int kMaxValidDepthMm = 2500;
 }
 
 class OrbbecCamera {
@@ -138,7 +139,8 @@ public:
         if (depth_data_.empty()) return -1;
         if (x < 0 || y < 0 || x >= depth_width_ || y >= depth_height_) return -2;
 
-        return static_cast<int>(depth_data_[y * depth_width_ + x]);
+        uint16_t d = depth_data_[y * depth_width_ + x];
+        return (d > 0 && d <= kMaxValidDepthMm) ? static_cast<int>(d) : 0;
     }
 
     std::pair<int, int> get_depth_in_box(int x1, int y1, int x2, int y2) {
@@ -170,12 +172,11 @@ public:
         std::vector<int> valid;
         valid.reserve((x2 - x1 + 1) * (y2 - y1 + 1));
 
-        const int MAX_DEPTH_MM = 5000;
 
         for (int y = y1; y <= y2; y++) {
             for (int x = x1; x <= x2; x++) {
                 uint16_t d = depth_data_[y * depth_width_ + x];
-                if (d > 0 && d < MAX_DEPTH_MM) {
+                if (d > 0 && d <= kMaxValidDepthMm) {
                     valid.push_back(static_cast<int>(d));
                 }
             }
