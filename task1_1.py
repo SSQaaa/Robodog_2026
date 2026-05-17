@@ -213,20 +213,20 @@ def draw_detection(frame, box, cls_id, conf, depth_mm, valid_count, pos_3d=None)
 class DWA_Planner:
     def __init__(self):
         # 速度约束 (m/s)
-        self.max_v = 1.8          # 最大前向速度
-        self.min_v = -0.3         # 允许后退
-        self.max_w = 0.5          # 最大横向速度
-        self.max_acc_v = 1.5      # 前进加速度限制
-        self.max_acc_w = 1.0      # 横向加速度限制
+        self.max_v = 1.8
+        self.min_v = -0.3
+        self.max_w = 0.5
+        self.max_acc_v = 1.5
+        self.max_acc_w = 1.0
         # 采样数
         self.v_samples = 9
         self.w_samples = 7
         # 预测参数
-        self.dt = 0.1             # 模拟步长 (s)
-        self.predict_time = 1.2   # 预测时长 (s)
+        self.dt = 0.1
+        self.predict_time = 1.2
         # 安全参数
-        self.robot_radius = 0.25  # 机器狗半径 (m)
-        self.safe_dist = 0.3      # 额外安全裕度
+        self.robot_radius = 0.25
+        self.safe_dist = 0.3
         # 代价权重
         self.goal_weight = 2.0
         self.obs_weight = 5.0
@@ -234,24 +234,21 @@ class DWA_Planner:
         # 边界墙 x 坐标 (m)，通道宽 1.5m，中心在 0，狗半宽 0.2，左右各留 0.1 余量
         self.wall_left = -0.55
         self.wall_right = 0.55
-        # 目标点 (x, z) 在局部坐标系下 (横向0，前方4m)
+        # 目标点 (x, z) 在局部坐标系下
         self.goal = np.array([0.0, 4.0])
         # 上一时刻速度
         self.prev_v = 0.0
         self.prev_w = 0.0
 
     def plan(self, cones_3d):
-        """
-        输入: cones_3d 列表，每个元素 {'x':, 'z':, ...}
-        返回: (vx_command, vy_command) 机器狗协议速度值
-        """
         # 1. 构建障碍物点集（锥桶 + 虚拟边界墙）
         obstacles = []
         for c in cones_3d:
             if 0 < c['z'] < 5.0:
                 obstacles.append([c['x'], c['z']])
-        # 虚拟边界墙（离散点，间隔 0.2m）
-        for z in np.arange(0.0, self.predict_time * self.max_v + 0.5, 0.2):
+        # 虚拟墙延伸到终点之后，防止越界（修正：延伸到 goal.z + 2m）
+        wall_z_max = self.goal[1] + 2.0
+        for z in np.arange(0.0, wall_z_max, 0.2):
             obstacles.append([self.wall_left, z])
             obstacles.append([self.wall_right, z])
         obstacles = np.array(obstacles) if obstacles else np.empty((0, 2))
@@ -268,7 +265,6 @@ class DWA_Planner:
         # 3. 遍历采样速度
         for v in np.linspace(v_min, v_max, self.v_samples):
             for w in np.linspace(w_min, w_max, self.w_samples):
-                # 轨迹模拟
                 x, z = 0.0, 0.0
                 min_dist = float('inf')
                 steps = int(self.predict_time / self.dt)
@@ -283,25 +279,31 @@ class DWA_Planner:
                 if min_dist < self.robot_radius + self.safe_dist:
                     continue
 
-                # 代价计算
+                # 代价计算（修正障碍物代价符号）
                 dist_to_goal = np.hypot(self.goal[0] - x, self.goal[1] - z)
                 goal_score = 1.0 / (dist_to_goal + 0.01)
-                obs_score = 1.0 / (min_dist - self.robot_radius + 0.01)
+                obs_cost = -1.0 / (min_dist - self.robot_radius + 0.01)   # 障碍物惩罚
                 speed_score = v / self.max_v
 
                 total = (self.goal_weight * goal_score +
-                         self.obs_weight * obs_score +
+                         self.obs_weight * obs_cost +
                          self.speed_weight * speed_score)
 
                 if total > best_score:
                     best_score = total
                     best_v, best_w = v, w
 
-        # 4. 更新上一时刻速度
+        # 4. 无可行轨迹 fallback（修正：缓慢后退）
+        if best_score == -float('inf'):
+            best_v = -0.2
+            best_w = 0.0
+            print("[DWA] No feasible path, emergency braking")
+
+        # 5. 更新上一时刻速度
         self.prev_v = best_v
         self.prev_w = best_w
 
-        # 5. 转换为机器狗指令值
+        # 6. 转换为机器狗指令值
         vx_cmd = int(best_v / SPEED_FACTOR)
         vy_cmd = int(best_w / LATERAL_SPEED_SCALE)
 
