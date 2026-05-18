@@ -22,6 +22,9 @@ namespace {
 // Set this to false when the camera is mounted upright.
 const bool kRotateFrames180 = true;
 const int kMaxValidDepthMm = 2500;
+const int kColorWidth = 1920;
+const int kColorHeight = 1080;
+const int kColorFps = 30;
 }
 
 class OrbbecCamera {
@@ -48,7 +51,12 @@ public:
         config_->enableStream(depthProfile);
 
         auto colorProfiles = pipe_.getStreamProfileList(OB_SENSOR_COLOR);
-        auto colorProfile = colorProfiles->getProfile(OB_PROFILE_DEFAULT);
+        auto colorProfile = colorProfiles->getVideoStreamProfile(
+            kColorWidth,
+            kColorHeight,
+            OB_FORMAT_MJPG,
+            kColorFps
+        );
         config_->enableStream(colorProfile);
 
         // 如果你的 SDK 支持 D2C 软件对齐，可以打开这一句。
