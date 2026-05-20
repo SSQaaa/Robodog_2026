@@ -6,7 +6,7 @@
 1. 不修改原 task2.py，只改本文件。
 2. 只记录：第几个仪表盘、仪表盘状态、字母值。
 3. 只有“居中+距离”使用状态机逻辑。
-   - 状态机仅包含：ALIGN -> DISTANCE -> SSI_CHECK
+   - 状态机仅用于字母阶段：ALIGN -> DISTANCE
 4. 其他部分不用状态机：
    - 找单仪表盘（SEARCH）用普通循环
    - 读取状态（READ_STATE）用普通循环
@@ -154,7 +154,7 @@ def _read_letter_normal_loop(detector, need_frames=3, max_frames=40):
             return "unknown"
 
 
-def task2_new(robot):
+def task2_new(robot, show_stream=False):
     """
     第一个仪表盘识别。
 
@@ -167,7 +167,7 @@ def task2_new(robot):
       }
     ]
     """
-    detector = SimpleInfer()
+    detector = SimpleInfer(show_stream=show_stream)
     records = []
 
     try:
@@ -183,36 +183,33 @@ def task2_new(robot):
         # ----------------------------
         # 第一个仪表盘阈值（你后续自己填）
         # ----------------------------
-        # 粗居中阈值
-        first_x_center_min = 210
-        first_x_center_max = 430
-
-        # 距离闭环目标和容差
-        first_distance_target_m = 0.78
-        first_distance_tolerance_m = 0.05
-
         # 字母先决阈值（你后续自己填）
-        first_letter_x_center_min = 280
-        first_letter_x_center_max = 360
-        first_letter_distance_min_m = 0.70
-        first_letter_distance_max_m = 0.95
+        first_letter_x_center_min = 290
+        first_letter_x_center_max = 320
+        first_letter_distance_target_m = 0.35
+        first_letter_distance_tolerance_m = 0.10
 
         # 每个状态最多微调次数
-        max_align_adjust_count = 3
-        max_distance_adjust_count = 5
+        max_letter_align_adjust_count = 5
+        max_letter_distance_adjust_count = 8
         max_ssi_check_retry_count = 5
-        max_letter_adjust_count = 25
 
         # ----------------------------
-        # 二、普通循环：先让字母位置合适（居中+距离），再切换到匍匐
+        # 二、状态机：先让字母位置合适（居中+距离），再切换到匍匐
         # ----------------------------
-        letter_adjust_count = 0
+        letter_state = "ALIGN"  # ALIGN / DISTANCE
+        letter_align_adjust_count = 0
+        letter_distance_adjust_count = 0
+
         while True:
             infer_output = detector.infer_once()
             letter_det = _pick_best_letter_detection(infer_output)
 
             if letter_det is None:
                 print("LETTER_PRECHECK: 字母未识别，继续等待")
+                letter_state = "ALIGN"
+                letter_align_adjust_count = 0
+                letter_distance_adjust_count = 0
                 time.sleep(0.2)
                 continue
 
@@ -220,53 +217,71 @@ def task2_new(robot):
             letter_x_center = float(letter_det["x_center"])
             letter_distance_m = letter_det["distance_m"]
 
-            if letter_x_center < first_letter_x_center_min:
-                robot.move(last_time=0.12, vy=-15000)
-                letter_adjust_count += 1
-                print("LETTER_PRECHECK: {} 偏左，左移，x_center={:.1f} 次数={}".format(letter, letter_x_center, letter_adjust_count))
-                if letter_adjust_count > max_letter_adjust_count:
-                    print("LETTER_PRECHECK: 超限，重置计数后继续")
-                    letter_adjust_count = 0
+            if letter_state == "ALIGN":
+                if letter_x_center < first_letter_x_center_min:
+                    robot.move(last_time=0.12, vy=-15000)
+                    letter_align_adjust_count += 1
+                    print("LETTER_ALIGN: {} 偏左，左移，x_center={:.1f} 次数={}".format(letter, letter_x_center, letter_align_adjust_count))
+                    time.sleep(0.25)
+                elif letter_x_center > first_letter_x_center_max:
+                    robot.move(last_time=0.12, vy=15000)
+                    letter_align_adjust_count += 1
+                    print("LETTER_ALIGN: {} 偏右，右移，x_center={:.1f} 次数={}".format(letter, letter_x_center, letter_align_adjust_count))
+                    time.sleep(0.25)
+                else:
+                    print("LETTER_ALIGN: 居中通过，进入LETTER_DISTANCE")
+                    letter_state = "DISTANCE"
+                    letter_distance_adjust_count = 0
+
+                if letter_align_adjust_count > max_letter_align_adjust_count:
+                    print("LETTER_ALIGN: 超限，重置到ALIGN")
+                    letter_state = "ALIGN"
+                    letter_align_adjust_count = 0
+                    letter_distance_adjust_count = 0
+                continue
+
+            if letter_state == "DISTANCE":
+                if letter_distance_m is None:
+                    print("LETTER_DISTANCE: 深度无效，回到LETTER_ALIGN")
+                    letter_state = "ALIGN"
+                    letter_align_adjust_count = 0
+                    letter_distance_adjust_count = 0
+                    time.sleep(0.2)
+                    continue
+
+                letter_error_m = first_letter_distance_target_m - float(letter_distance_m)
+                if abs(letter_error_m) <= first_letter_distance_tolerance_m:
+                    print("LETTER_DISTANCE: 距离通过，字母阶段完成，letter={} x={:.1f} d={:.3f}m".format(letter, letter_x_center, letter_distance_m))
+                    break
+
+                if abs(letter_error_m) > 0.20:
+                    letter_vx_abs = 15000
+                elif abs(letter_error_m) > 0.10:
+                    letter_vx_abs = 10000
+                else:
+                    letter_vx_abs = 7000
+
+                letter_vx = letter_vx_abs if letter_error_m < 0 else -letter_vx_abs
+                robot.move(last_time=0.10, vx=letter_vx)
+                letter_distance_adjust_count += 1
+                print(
+                    "LETTER_DISTANCE: {} 当前={:.3f}m 目标={:.3f}m 误差={:.3f}m vx={} 次数={}".format(
+                        letter,
+                        letter_distance_m,
+                        first_letter_distance_target_m,
+                        letter_error_m,
+                        letter_vx,
+                        letter_distance_adjust_count,
+                    )
+                )
                 time.sleep(0.25)
-                continue
 
-            if letter_x_center > first_letter_x_center_max:
-                robot.move(last_time=0.12, vy=15000)
-                letter_adjust_count += 1
-                print("LETTER_PRECHECK: {} 偏右，右移，x_center={:.1f} 次数={}".format(letter, letter_x_center, letter_adjust_count))
-                if letter_adjust_count > max_letter_adjust_count:
-                    print("LETTER_PRECHECK: 超限，重置计数后继续")
-                    letter_adjust_count = 0
-                time.sleep(0.25)
+                if letter_distance_adjust_count > max_letter_distance_adjust_count:
+                    print("LETTER_DISTANCE: 超限，回到LETTER_ALIGN")
+                    letter_state = "ALIGN"
+                    letter_align_adjust_count = 0
+                    letter_distance_adjust_count = 0
                 continue
-
-            if letter_distance_m is None:
-                print("LETTER_PRECHECK: {} 深度无效，继续等待".format(letter))
-                time.sleep(0.2)
-                continue
-
-            if float(letter_distance_m) < first_letter_distance_min_m:
-                robot.move(last_time=0.10, vx=-7000)
-                letter_adjust_count += 1
-                print("LETTER_PRECHECK: {} 过近，后退，d={:.3f}m 次数={}".format(letter, letter_distance_m, letter_adjust_count))
-                if letter_adjust_count > max_letter_adjust_count:
-                    print("LETTER_PRECHECK: 超限，重置计数后继续")
-                    letter_adjust_count = 0
-                time.sleep(0.25)
-                continue
-
-            if float(letter_distance_m) > first_letter_distance_max_m:
-                robot.move(last_time=0.10, vx=7000)
-                letter_adjust_count += 1
-                print("LETTER_PRECHECK: {} 过远，前进，d={:.3f}m 次数={}".format(letter, letter_distance_m, letter_adjust_count))
-                if letter_adjust_count > max_letter_adjust_count:
-                    print("LETTER_PRECHECK: 超限，重置计数后继续")
-                    letter_adjust_count = 0
-                time.sleep(0.25)
-                continue
-
-            print("LETTER_PRECHECK: 通过，字母={} x_center={:.1f} d={:.3f}m".format(letter, letter_x_center, letter_distance_m))
-            break
 
         # ----------------------------
         # 三、普通循环：等待单仪表盘
@@ -274,134 +289,34 @@ def task2_new(robot):
         _wait_single_dashboard(detector)
 
         # ----------------------------
-        # 四、状态机（居中+距离+ssi可见性）
+        # 四、普通if：只做ssi可见性检查
         # ----------------------------
-        state = "ALIGN"  # 只会在 ALIGN / DISTANCE / SSI_CHECK 三个状态里切换
-        align_adjust_count = 0
-        distance_adjust_count = 0
         ssi_check_retry_count = 0
 
         while True:
             infer_output = detector.infer_once()
             result = analyze_infer_output(infer_output)
 
-            # 状态机内部也要求单仪表盘，否则回到外层重新等待
             if result["dashboard_count"] != 1:
-                print("ADJUST: 非单仪表盘，跳出状态机并重新等待")
+                print("SSI_CHECK: 非单仪表盘，重新等待")
                 _wait_single_dashboard(detector)
-                state = "ALIGN"
-                align_adjust_count = 0
-                distance_adjust_count = 0
                 ssi_check_retry_count = 0
                 continue
 
-            detail = result["dashboard_details"][0]
-            x_center = _calc_center_x_from_vertices(detail["vertices"])
-            distance_m = detail["distance_m"]
+            has_ssi = _has_ssi_detection(infer_output)
+            if has_ssi:
+                print("SSI_CHECK: 已检测到ssi，进入读取仪表盘状态步骤")
+                break
 
-            if state == "ALIGN":
-                if x_center < first_x_center_min:
-                    robot.DOWNmove(last_time=0.2, vy=-20000)
-                    align_adjust_count += 1
-                    print("ALIGN: 偏左，左移，x_center={:.1f} 次数={}".format(x_center, align_adjust_count))
-                    time.sleep(0.3)
-                elif x_center > first_x_center_max:
-                    robot.DOWNmove(last_time=0.2, vy=20000)
-                    align_adjust_count += 1
-                    print("ALIGN: 偏右，右移，x_center={:.1f} 次数={}".format(x_center, align_adjust_count))
-                    time.sleep(0.3)
-                else:
-                    print("ALIGN: 粗居中通过，进入DISTANCE")
-                    state = "DISTANCE"
-                    distance_adjust_count = 0
+            robot.DOWNmove(last_time=0.10, vx=-7000)
+            ssi_check_retry_count += 1
+            print("SSI_CHECK: 未检测到ssi，后退微调，次数={}".format(ssi_check_retry_count))
+            time.sleep(0.25)
 
-                if align_adjust_count > max_align_adjust_count:
-                    print("ALIGN: 超限，重新等待单仪表盘")
-                    _wait_single_dashboard(detector)
-                    state = "ALIGN"
-                    align_adjust_count = 0
-                    distance_adjust_count = 0
-                    ssi_check_retry_count = 0
-                continue
-
-            if state == "DISTANCE":
-                if distance_m is None:
-                    print("DISTANCE: 深度无效，重新等待单仪表盘")
-                    _wait_single_dashboard(detector)
-                    state = "ALIGN"
-                    align_adjust_count = 0
-                    distance_adjust_count = 0
-                    ssi_check_retry_count = 0
-                    continue
-
-                error_m = first_distance_target_m - float(distance_m)
-
-                if abs(error_m) <= first_distance_tolerance_m:
-                    print("DISTANCE: 距离通过，进入SSI_CHECK")
-                    state = "SSI_CHECK"
-                    ssi_check_retry_count = 0
-                    continue
-
-                if abs(error_m) > 0.20:
-                    vx_abs = 15000
-                elif abs(error_m) > 0.10:
-                    vx_abs = 10000
-                else:
-                    vx_abs = 7000
-
-                # 目标是：远了前进，近了后退
-                # error_m = target - current
-                # error_m < 0 -> current更远 -> 前进（正vx）
-                # error_m > 0 -> current更近 -> 后退（负vx）
-                vx = vx_abs if error_m < 0 else -vx_abs
-                robot.DOWNmove(last_time=0.12, vx=vx)
-                distance_adjust_count += 1
-
-                print(
-                    "DISTANCE: 当前={:.3f}m 目标={:.3f}m 误差={:.3f}m vx={} 次数={}".format(
-                        distance_m,
-                        first_distance_target_m,
-                        error_m,
-                        vx,
-                        distance_adjust_count,
-                    )
-                )
-                time.sleep(0.25)
-
-                if distance_adjust_count > max_distance_adjust_count:
-                    print("DISTANCE: 超限，重新等待单仪表盘")
-                    _wait_single_dashboard(detector)
-                    state = "ALIGN"
-                    align_adjust_count = 0
-                    distance_adjust_count = 0
-                    ssi_check_retry_count = 0
-                continue
-
-            if state == "SSI_CHECK":
-                has_ssi = _has_ssi_detection(infer_output)
-                if has_ssi:
-                    print("SSI_CHECK: 已检测到ssi，结束调整状态机")
-                    break
-
-                robot.DOWNmove(last_time=0.10, vx=-7000)
-                ssi_check_retry_count += 1
-                print("SSI_CHECK: 未检测到ssi，后退微调，次数={}".format(ssi_check_retry_count))
-                time.sleep(0.25)
-
-                if ssi_check_retry_count > max_ssi_check_retry_count:
-                    print("SSI_CHECK: 超限，重新等待单仪表盘")
-                    _wait_single_dashboard(detector)
-                    state = "ALIGN"
-                    align_adjust_count = 0
-                    distance_adjust_count = 0
-                    ssi_check_retry_count = 0
-                else:
-                    state = "DISTANCE"
-                continue
-
-            # 理论不会到这，保险处理
-            print("ADJUST: 未知状态，重置到ALIGN")
-            state = "ALIGN"
+            if ssi_check_retry_count > max_ssi_check_retry_count:
+                print("SSI_CHECK: 超限，重新等待单仪表盘")
+                _wait_single_dashboard(detector)
+                ssi_check_retry_count = 0
 
         # ----------------------------
         # 五、普通循环：先读状态，再读字母

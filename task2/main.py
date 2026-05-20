@@ -1,11 +1,13 @@
 from dog_control_sxh_test import DogControl
-from tasks.walk import walk_task
-from tasks.process_three import Process_Three
-from tasks.play_football import play_football
+import argparse
 import time
 from tasks.task2_new import task2_new   
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--stream", action="store_true", help="显示任务二检测画面")
+    args = parser.parse_args()
+
     robot = DogControl()
     time.sleep(1)
     robot.close_continue()
@@ -15,12 +17,10 @@ if __name__ == "__main__":
     robot.stand_up()
     time.sleep(0.5)
 
-    # 踢球任务
-    # play_football(robot, color='orange', show_video=True)
     # 任务二
     # task2(robot)
     # 新的任务二
-    task2_new(robot)
+    task2_new(robot, show_stream=args.stream)
 
     robot.close_continue()
     robot.stop()
