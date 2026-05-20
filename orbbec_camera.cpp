@@ -24,9 +24,6 @@ namespace {
 // Set this to false when the camera is mounted upright.
 const bool kRotateFrames180 = true;
 const int kMaxValidDepthMm = 2500;
-const int kColorWidth = 1920;
-const int kColorHeight = 1080;
-const int kColorFps = 30;
 
 OBLogSeverity parseLogSeverity(const std::string &level) {
     if (level == "debug") return OB_LOG_SEVERITY_DEBUG;
@@ -83,13 +80,9 @@ public:
         config_->enableStream(depthProfile);
 
         auto colorProfiles = pipe_->getStreamProfileList(OB_SENSOR_COLOR);
-        auto colorProfile = colorProfiles->getVideoStreamProfile(
-            kColorWidth,
-            kColorHeight,
-            OB_FORMAT_MJPG,
-            kColorFps
-        );
+        auto colorProfile = colorProfiles->getProfile(OB_PROFILE_DEFAULT);
         config_->enableStream(colorProfile);
+
         // If the SDK supports D2C software alignment, this can be enabled.
         // Keep it commented out if OB_ALIGN_D2C_SW_MODE is not defined.
         // config_->setAlignMode(OB_ALIGN_D2C_SW_MODE);
