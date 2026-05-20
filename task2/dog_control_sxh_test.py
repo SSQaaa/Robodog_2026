@@ -74,6 +74,24 @@ class DogControl:
 
         time.sleep(duration)
 
+    def DOWNmove(self, last_time: float = 0, vx=0, vy=0, vz=0, duration=0.0):
+        self.__udp_client.send(0x21010D06)
+        # 正常/匍匐步态切换
+        self.__udp_client.send(0x21010406)
+        # 切换成匍匐后等待0.5秒
+        time.sleep(0.5)
+
+        start_time = time.time()
+        while True:
+            self.__udp_client.send(0x21010130, vx)  # 前后平移
+            self.__udp_client.send(0x21010131, vy)  # 左右平移
+            self.__udp_client.send(0x21010135, vz)  # 左右转弯
+
+            if time.time() - start_time > last_time:
+                break
+
+        time.sleep(duration)
+
     def shake_head(self):
         self.__udp_client.send(0x21010D05, duration=1)  # 开启原地模式
 
