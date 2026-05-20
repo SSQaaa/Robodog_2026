@@ -12,6 +12,8 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
+#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -25,6 +27,33 @@ const int kMaxValidDepthMm = 2500;
 const int kColorWidth = 1920;
 const int kColorHeight = 1080;
 const int kColorFps = 30;
+
+OBLogSeverity parseLogSeverity(const std::string &level) {
+    if (level == "debug") return OB_LOG_SEVERITY_DEBUG;
+    if (level == "info") return OB_LOG_SEVERITY_INFO;
+    if (level == "warn" || level == "warning") return OB_LOG_SEVERITY_WARN;
+    if (level == "error") return OB_LOG_SEVERITY_ERROR;
+    if (level == "fatal") return OB_LOG_SEVERITY_FATAL;
+    if (level == "none" || level == "off") return OB_LOG_SEVERITY_NONE;
+
+    throw std::invalid_argument(
+        "Unsupported Orbbec log level: " + level +
+        ". Expected debug, info, warn, error, fatal, or none."
+    );
+}
+
+void setOrbbecLogLevel(const std::string &level) {
+    const auto severity = parseLogSeverity(level);
+    ob::Context::setLoggerSeverity(severity);
+    ob::Context::setLoggerToConsole(severity);
+}
+
+void configureDefaultOrbbecLogging() {
+    static std::once_flag once;
+    std::call_once(once, []() {
+        setOrbbecLogLevel("error");
+    });
+}
 }
 
 class OrbbecCamera {
@@ -35,7 +64,9 @@ public:
           depth_height_(0),
           color_width_(0),
           color_height_(0),
-          rotate_180_(kRotateFrames180) {}
+          rotate_180_(kRotateFrames180) {
+        configureDefaultOrbbecLogging();
+    }
 
     ~OrbbecCamera() {
         stop();
@@ -44,13 +75,14 @@ public:
     void start() {
         if (running_) return;
 
+        ensurePipeline();
         config_ = std::make_shared<ob::Config>();
 
-        auto depthProfiles = pipe_.getStreamProfileList(OB_SENSOR_DEPTH);
+        auto depthProfiles = pipe_->getStreamProfileList(OB_SENSOR_DEPTH);
         auto depthProfile = depthProfiles->getProfile(OB_PROFILE_DEFAULT);
         config_->enableStream(depthProfile);
 
-        auto colorProfiles = pipe_.getStreamProfileList(OB_SENSOR_COLOR);
+        auto colorProfiles = pipe_->getStreamProfileList(OB_SENSOR_COLOR);
         auto colorProfile = colorProfiles->getVideoStreamProfile(
             kColorWidth,
             kColorHeight,
@@ -58,12 +90,11 @@ public:
             kColorFps
         );
         config_->enableStream(colorProfile);
-
-        // 如果你的 SDK 支持 D2C 软件对齐，可以打开这一句。
-        // 如果编译报 OB_ALIGN_D2C_SW_MODE 未定义，就保持注释。
+        // If the SDK supports D2C software alignment, this can be enabled.
+        // Keep it commented out if OB_ALIGN_D2C_SW_MODE is not defined.
         // config_->setAlignMode(OB_ALIGN_D2C_SW_MODE);
 
-        pipe_.start(config_);
+        pipe_->start(config_);
 
         printCameraIntrinsics();
 
@@ -81,7 +112,9 @@ public:
         }
 
         try {
-            pipe_.stop();
+            if (pipe_) {
+                pipe_->stop();
+            }
         } catch (...) {
         }
     }
@@ -101,7 +134,8 @@ public:
     }
 
     py::dict get_color_intrinsics() {
-        auto cameraParam = pipe_.getCameraParam();
+        ensurePipeline();
+        auto cameraParam = pipe_->getCameraParam();
         auto intr = cameraParam.rgbIntrinsic;
         return makeIntrinsicsDict(
             intr.fx,
@@ -115,7 +149,8 @@ public:
     }
 
     py::dict get_depth_intrinsics() {
-        auto cameraParam = pipe_.getCameraParam();
+        ensurePipeline();
+        auto cameraParam = pipe_->getCameraParam();
         auto intr = cameraParam.depthIntrinsic;
         return makeIntrinsicsDict(
             intr.fx,
@@ -201,9 +236,16 @@ public:
     }
 
 private:
+    void ensurePipeline() {
+        if (!pipe_) {
+            configureDefaultOrbbecLogging();
+            pipe_.reset(new ob::Pipeline());
+        }
+    }
+
     void captureLoop() {
         while (running_) {
-            auto frameset = pipe_.waitForFrames(100);
+            auto frameset = pipe_->waitForFrames(100);
             if (!frameset) continue;
 
             auto depthFrame = frameset->depthFrame();
@@ -394,7 +436,7 @@ private:
     }
 
 private:
-    ob::Pipeline pipe_;
+    std::unique_ptr<ob::Pipeline> pipe_;
     std::shared_ptr<ob::Config> config_;
 
     std::atomic<bool> running_;
