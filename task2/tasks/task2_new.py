@@ -149,12 +149,12 @@ def task2_new(robot):
         first_x_center_max = 430
 
         # 精居中阈值
-        first_x_center_fine_min = 280
-        first_x_center_fine_max = 360
+        first_x_center_fine_min = 300
+        first_x_center_fine_max = 340
 
         # 距离闭环目标和容差
-        first_distance_target_m = 0.78
-        first_distance_tolerance_m = 0.05
+        first_distance_target_m = 0.35
+        first_distance_tolerance_m = 0.40
 
         # 每个状态最多微调次数
         max_align_adjust_count = 3
@@ -272,12 +272,12 @@ def task2_new(robot):
 
             if state == "ALIGN_FINE":
                 if x_center < first_x_center_fine_min:
-                    robot.move(last_time=0.1, vy=-12000)
+                    robot.move(last_time=0.1, vy=-15000)
                     align_fine_adjust_count += 1
                     print("ALIGN_FINE: 偏左，微调左移，x_center={:.1f} 次数={}".format(x_center, align_fine_adjust_count))
                     time.sleep(0.25)
                 elif x_center > first_x_center_fine_max:
-                    robot.move(last_time=0.1, vy=12000)
+                    robot.move(last_time=0.1, vy=15000)
                     align_fine_adjust_count += 1
                     print("ALIGN_FINE: 偏右，微调右移，x_center={:.1f} 次数={}".format(x_center, align_fine_adjust_count))
                     time.sleep(0.25)

@@ -3,7 +3,7 @@ from tasks.walk import walk_task
 from tasks.process_three import Process_Three
 from tasks.play_football import play_football
 import time
-from tasks.task2 import task2
+from tasks.task2_new import task2_new   
 
 if __name__ == "__main__":
     robot = DogControl()
@@ -18,7 +18,9 @@ if __name__ == "__main__":
     # 踢球任务
     # play_football(robot, color='orange', show_video=True)
     # 任务二
-    task2(robot)
+    # task2(robot)
+    # 新的任务二
+    task2_new(robot)
 
     robot.close_continue()
     robot.stop()
