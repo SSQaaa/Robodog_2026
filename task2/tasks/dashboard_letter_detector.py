@@ -324,6 +324,14 @@ class SimpleInfer:
         if image_raw is None:
             return
 
+        # 在窗口固定位置显示三类目标距离（dashboard / red / green）
+        dashboard_distance_text = "dashboard distance: N/A"
+        red_distance_text = "red distance: N/A"
+        green_distance_text = "green distance: N/A"
+        best_score_dashboard = -1.0
+        best_score_red = -1.0
+        best_score_green = -1.0
+
         for det in infer_output["detections"]:
             x1, y1, x2, y2 = det["xyxy"]
             cid = det["class_id"]
@@ -336,7 +344,32 @@ class SimpleInfer:
             dis_text = "{:.2f}m".format(det["distance_m"]) if det["distance_m"] is not None else "depth invalid"
             cv2.putText(image_raw, dis_text, (x1, min(image_raw.shape[0] - 8, y2 + 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 0), 2)
 
+            # 类别8是dashboard，显示其距离信息（同类取最高置信度）
+            if cid == DASHBOARD_ID and score >= best_score_dashboard:
+                best_score_dashboard = score
+                if det["distance_m"] is not None:
+                    dashboard_distance_text = "dashboard distance: {:.3f} m".format(det["distance_m"])
+                else:
+                    dashboard_distance_text = "dashboard distance: depth invalid"
+            # 类别6是Red，显示其距离信息（同类取最高置信度）
+            if cid == 6 and score >= best_score_red:
+                best_score_red = score
+                if det["distance_m"] is not None:
+                    red_distance_text = "red distance: {:.3f} m".format(det["distance_m"])
+                else:
+                    red_distance_text = "red distance: depth invalid"
+            # 类别4是Green，显示其距离信息（同类取最高置信度）
+            if cid == 4 and score >= best_score_green:
+                best_score_green = score
+                if det["distance_m"] is not None:
+                    green_distance_text = "green distance: {:.3f} m".format(det["distance_m"])
+                else:
+                    green_distance_text = "green distance: depth invalid"
+
         cv2.putText(image_raw, "infer: {:.1f} ms".format(infer_output["infer_ms"]), (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        cv2.putText(image_raw, dashboard_distance_text, (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+        cv2.putText(image_raw, red_distance_text, (10, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+        cv2.putText(image_raw, green_distance_text, (10, 115), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
         cv2.imshow(WINDOW_NAME, image_raw)
         cv2.waitKey(1)
 
