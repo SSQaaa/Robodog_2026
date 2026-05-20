@@ -6,6 +6,9 @@
 namespace py = pybind11;
 
 PYBIND11_MODULE(orbbec_native, m) {
+    configureDefaultOrbbecLogging();
+    m.def("set_log_level", &setOrbbecLogLevel, "Set Orbbec SDK log level: debug, info, warn, error, fatal, or none.");
+
     py::class_<OrbbecCamera>(m, "OrbbecCamera")
         .def(py::init<>())
         .def("start", &OrbbecCamera::start)
