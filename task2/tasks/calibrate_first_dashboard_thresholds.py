@@ -8,12 +8,12 @@
 3. 输出建议阈值，直接填到 task2_new.py：
    - first_x_center_min
    - first_x_center_max
-   - first_distance_min_m
-   - first_distance_max_m
+   - first_distance_target_m
+   - first_distance_tolerance_m
    - first_letter_x_center_min
    - first_letter_x_center_max
-   - first_letter_distance_min_m
-   - first_letter_distance_max_m
+   - first_letter_distance_target_m
+   - first_letter_distance_tolerance_m
 
 说明：
 - 只做采样统计，不做运动控制。
@@ -188,6 +188,8 @@ def main():
     first_x_center_max = int(round(x_p80 + x_pad))
     first_distance_min_m = round(max(0.05, d_p20 - d_pad), 3)
     first_distance_max_m = round(d_p80 + d_pad, 3)
+    first_distance_target_m = round((first_distance_min_m + first_distance_max_m) / 2.0, 3)
+    first_distance_tolerance_m = round((first_distance_max_m - first_distance_min_m) / 2.0, 3)
 
     if lx_p20 is None or lx_p80 is None:
         first_letter_x_center_min = None
@@ -199,9 +201,13 @@ def main():
     if ld_p20 is None or ld_p80 is None:
         first_letter_distance_min_m = None
         first_letter_distance_max_m = None
+        first_letter_distance_target_m = None
+        first_letter_distance_tolerance_m = None
     else:
         first_letter_distance_min_m = round(max(0.05, ld_p20 - d_pad), 3)
         first_letter_distance_max_m = round(ld_p80 + d_pad, 3)
+        first_letter_distance_target_m = round((first_letter_distance_min_m + first_letter_distance_max_m) / 2.0, 3)
+        first_letter_distance_tolerance_m = round((first_letter_distance_max_m - first_letter_distance_min_m) / 2.0, 3)
 
     state_counter = Counter(states)
     letter_counter = Counter(letters)
@@ -224,20 +230,20 @@ def main():
     print("\n================ 建议填入 task2_new 的阈值 ================")
     print("first_x_center_min = {}".format(first_x_center_min))
     print("first_x_center_max = {}".format(first_x_center_max))
-    print("first_distance_min_m = {:.3f}".format(first_distance_min_m))
-    print("first_distance_max_m = {:.3f}".format(first_distance_max_m))
+    print("first_distance_target_m = {:.3f}".format(first_distance_target_m))
+    print("first_distance_tolerance_m = {:.3f}".format(first_distance_tolerance_m))
     if first_letter_x_center_min is None or first_letter_x_center_max is None:
         print("first_letter_x_center_min = 无有效样本")
         print("first_letter_x_center_max = 无有效样本")
     else:
         print("first_letter_x_center_min = {}".format(first_letter_x_center_min))
         print("first_letter_x_center_max = {}".format(first_letter_x_center_max))
-    if first_letter_distance_min_m is None or first_letter_distance_max_m is None:
-        print("first_letter_distance_min_m = 无有效样本")
-        print("first_letter_distance_max_m = 无有效样本")
+    if first_letter_distance_target_m is None or first_letter_distance_tolerance_m is None:
+        print("first_letter_distance_target_m = 无有效样本")
+        print("first_letter_distance_tolerance_m = 无有效样本")
     else:
-        print("first_letter_distance_min_m = {:.3f}".format(first_letter_distance_min_m))
-        print("first_letter_distance_max_m = {:.3f}".format(first_letter_distance_max_m))
+        print("first_letter_distance_target_m = {:.3f}".format(first_letter_distance_target_m))
+        print("first_letter_distance_tolerance_m = {:.3f}".format(first_letter_distance_tolerance_m))
 
     print("\n你可以先直接用上面的建议值，再根据实测微调。")
 

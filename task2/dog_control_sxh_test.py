@@ -92,6 +92,11 @@ class DogControl:
 
         time.sleep(duration)
 
+    def UPDOWN(self):
+        self.__udp_client.send(0x21010D06)
+        self.__udp_client.send(0x21010406)
+        time.sleep(0.5)
+
     def shake_head(self):
         self.__udp_client.send(0x21010D05, duration=1)  # 开启原地模式
 

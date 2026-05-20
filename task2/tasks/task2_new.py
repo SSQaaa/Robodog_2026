@@ -65,7 +65,7 @@ def _has_ssi_detection(infer_output):
     return False
 
 
-def _wait_single_dashboard(detector):
+def _wait_single_dashboard(detector, robot):
     """普通循环：等待画面里只有一个仪表盘。"""
     while True:
         infer_output = detector.infer_once()
@@ -76,6 +76,8 @@ def _wait_single_dashboard(detector):
 
         if result["dashboard_count"] <= 0:
             print("SEARCH: 没有仪表盘，继续等待")
+            robot.move(last_time=0.10, vx=-7000)
+            time.sleep(0.25)
         else:
             print("SEARCH: 多个仪表盘，继续等待")
 
@@ -154,200 +156,352 @@ def _read_letter_normal_loop(detector, need_frames=3, max_frames=40):
             return "unknown"
 
 
-def task2_new(robot, show_stream=False):
-    """
-    第一个仪表盘识别。
+def _run_single_dashboard_with_detector(
+    detector,
+    robot,
+    dashboard_index,
+    letter_x_center_min,
+    letter_x_center_max,
+    letter_distance_target_m,
+    letter_distance_tolerance_m,
+    max_letter_align_adjust_count,
+    max_letter_distance_adjust_count,
+    max_ssi_check_retry_count,
+):
+    # ----------------------------
+    # 二、状态机：先让字母位置合适（居中+距离），再切换到匍匐
+    # ----------------------------
+    letter_state = "ALIGN"  # ALIGN / DISTANCE
+    letter_align_adjust_count = 0
+    letter_distance_adjust_count = 0
 
-    返回：
-    [
-      {
-        "dashboard_index": 1,
-        "dashboard_state": "正常/偏低/偏高/未知",
-        "letter": "A/B/C/D/unknown"
-      }
-    ]
-    """
-    detector = SimpleInfer(show_stream=show_stream)
-    records = []
+    while True:
+        infer_output = detector.infer_once()
+        letter_det = _pick_best_letter_detection(infer_output)
 
-    try:
-        # ----------------------------
-        # 一、先运动到第一个仪表盘附近（仿照原task2）
-        # ----------------------------
-        robot.move(last_time=2.5, vx=20000)
-        time.sleep(0.5)
+        if letter_det is None:
+            print("D{} LETTER_PRECHECK: 字母未识别，继续等待".format(dashboard_index))
+            letter_state = "ALIGN"
+            letter_align_adjust_count = 0
+            letter_distance_adjust_count = 0
+            time.sleep(0.2)
+            continue
 
-        robot.revolve_90_r()
-        time.sleep(0.5)
+        letter = letter_det["letter"]
+        letter_x_center = float(letter_det["x_center"])
+        letter_distance_m = letter_det["distance_m"]
 
-        # ----------------------------
-        # 第一个仪表盘阈值（你后续自己填）
-        # ----------------------------
-        # 字母先决阈值（你后续自己填）
-        first_letter_x_center_min = 290
-        first_letter_x_center_max = 320
-        first_letter_distance_target_m = 0.35
-        first_letter_distance_tolerance_m = 0.10
+        if letter_state == "ALIGN":
+            if letter_x_center < letter_x_center_min:
+                robot.move(last_time=0.12, vy=-15000)
+                letter_align_adjust_count += 1
+                print("D{} LETTER_ALIGN: {} 偏左，左移，x_center={:.1f} 次数={}".format(dashboard_index, letter, letter_x_center, letter_align_adjust_count))
+                time.sleep(0.25)
+            elif letter_x_center > letter_x_center_max:
+                robot.move(last_time=0.12, vy=15000)
+                letter_align_adjust_count += 1
+                print("D{} LETTER_ALIGN: {} 偏右，右移，x_center={:.1f} 次数={}".format(dashboard_index, letter, letter_x_center, letter_align_adjust_count))
+                time.sleep(0.25)
+            else:
+                print("D{} LETTER_ALIGN: 居中通过，进入LETTER_DISTANCE".format(dashboard_index))
+                letter_state = "DISTANCE"
+                letter_distance_adjust_count = 0
 
-        # 每个状态最多微调次数
-        max_letter_align_adjust_count = 5
-        max_letter_distance_adjust_count = 8
-        max_ssi_check_retry_count = 5
+            if letter_align_adjust_count > max_letter_align_adjust_count:
+                print("D{} LETTER_ALIGN: 超限，重置到ALIGN".format(dashboard_index))
+                letter_state = "ALIGN"
+                letter_align_adjust_count = 0
+                letter_distance_adjust_count = 0
+            continue
 
-        # ----------------------------
-        # 二、状态机：先让字母位置合适（居中+距离），再切换到匍匐
-        # ----------------------------
-        letter_state = "ALIGN"  # ALIGN / DISTANCE
-        letter_align_adjust_count = 0
-        letter_distance_adjust_count = 0
-
-        while True:
-            infer_output = detector.infer_once()
-            letter_det = _pick_best_letter_detection(infer_output)
-
-            if letter_det is None:
-                print("LETTER_PRECHECK: 字母未识别，继续等待")
+        if letter_state == "DISTANCE":
+            if letter_distance_m is None:
+                print("D{} LETTER_DISTANCE: 深度无效，回到LETTER_ALIGN".format(dashboard_index))
                 letter_state = "ALIGN"
                 letter_align_adjust_count = 0
                 letter_distance_adjust_count = 0
                 time.sleep(0.2)
                 continue
 
-            letter = letter_det["letter"]
-            letter_x_center = float(letter_det["x_center"])
-            letter_distance_m = letter_det["distance_m"]
-
-            if letter_state == "ALIGN":
-                if letter_x_center < first_letter_x_center_min:
-                    robot.move(last_time=0.12, vy=-15000)
-                    letter_align_adjust_count += 1
-                    print("LETTER_ALIGN: {} 偏左，左移，x_center={:.1f} 次数={}".format(letter, letter_x_center, letter_align_adjust_count))
-                    time.sleep(0.25)
-                elif letter_x_center > first_letter_x_center_max:
-                    robot.move(last_time=0.12, vy=15000)
-                    letter_align_adjust_count += 1
-                    print("LETTER_ALIGN: {} 偏右，右移，x_center={:.1f} 次数={}".format(letter, letter_x_center, letter_align_adjust_count))
-                    time.sleep(0.25)
-                else:
-                    print("LETTER_ALIGN: 居中通过，进入LETTER_DISTANCE")
-                    letter_state = "DISTANCE"
-                    letter_distance_adjust_count = 0
-
-                if letter_align_adjust_count > max_letter_align_adjust_count:
-                    print("LETTER_ALIGN: 超限，重置到ALIGN")
-                    letter_state = "ALIGN"
-                    letter_align_adjust_count = 0
-                    letter_distance_adjust_count = 0
-                continue
-
-            if letter_state == "DISTANCE":
-                if letter_distance_m is None:
-                    print("LETTER_DISTANCE: 深度无效，回到LETTER_ALIGN")
-                    letter_state = "ALIGN"
-                    letter_align_adjust_count = 0
-                    letter_distance_adjust_count = 0
-                    time.sleep(0.2)
-                    continue
-
-                letter_error_m = first_letter_distance_target_m - float(letter_distance_m)
-                if abs(letter_error_m) <= first_letter_distance_tolerance_m:
-                    print("LETTER_DISTANCE: 距离通过，字母阶段完成，letter={} x={:.1f} d={:.3f}m".format(letter, letter_x_center, letter_distance_m))
-                    break
-
-                if abs(letter_error_m) > 0.20:
-                    letter_vx_abs = 15000
-                elif abs(letter_error_m) > 0.10:
-                    letter_vx_abs = 10000
-                else:
-                    letter_vx_abs = 7000
-
-                letter_vx = letter_vx_abs if letter_error_m < 0 else -letter_vx_abs
-                robot.move(last_time=0.10, vx=letter_vx)
-                letter_distance_adjust_count += 1
-                print(
-                    "LETTER_DISTANCE: {} 当前={:.3f}m 目标={:.3f}m 误差={:.3f}m vx={} 次数={}".format(
-                        letter,
-                        letter_distance_m,
-                        first_letter_distance_target_m,
-                        letter_error_m,
-                        letter_vx,
-                        letter_distance_adjust_count,
-                    )
-                )
-                time.sleep(0.25)
-
-                if letter_distance_adjust_count > max_letter_distance_adjust_count:
-                    print("LETTER_DISTANCE: 超限，回到LETTER_ALIGN")
-                    letter_state = "ALIGN"
-                    letter_align_adjust_count = 0
-                    letter_distance_adjust_count = 0
-                continue
-
-        # ----------------------------
-        # 三、普通循环：等待单仪表盘
-        # ----------------------------
-        _wait_single_dashboard(detector)
-
-        # ----------------------------
-        # 四、普通if：只做ssi可见性检查
-        # ----------------------------
-        ssi_check_retry_count = 0
-
-        while True:
-            infer_output = detector.infer_once()
-            result = analyze_infer_output(infer_output)
-
-            if result["dashboard_count"] != 1:
-                print("SSI_CHECK: 非单仪表盘，重新等待")
-                _wait_single_dashboard(detector)
-                ssi_check_retry_count = 0
-                continue
-
-            has_ssi = _has_ssi_detection(infer_output)
-            if has_ssi:
-                print("SSI_CHECK: 已检测到ssi，进入读取仪表盘状态步骤")
+            letter_error_m = letter_distance_target_m - float(letter_distance_m)
+            if abs(letter_error_m) <= letter_distance_tolerance_m:
+                print("D{} LETTER_DISTANCE: 距离通过，字母阶段完成，letter={} x={:.1f} d={:.3f}m".format(dashboard_index, letter, letter_x_center, letter_distance_m))
                 break
 
-            robot.DOWNmove(last_time=0.10, vx=-7000)
-            ssi_check_retry_count += 1
-            print("SSI_CHECK: 未检测到ssi，后退微调，次数={}".format(ssi_check_retry_count))
+            if abs(letter_error_m) > 0.20:
+                letter_vx_abs = 15000
+            elif abs(letter_error_m) > 0.10:
+                letter_vx_abs = 10000
+            else:
+                letter_vx_abs = 7000
+
+            letter_vx = letter_vx_abs if letter_error_m < 0 else -letter_vx_abs
+            robot.move(last_time=0.10, vx=letter_vx)
+            letter_distance_adjust_count += 1
+            print(
+                "D{} LETTER_DISTANCE: {} 当前={:.3f}m 目标={:.3f}m 误差={:.3f}m vx={} 次数={}".format(
+                    dashboard_index,
+                    letter,
+                    letter_distance_m,
+                    letter_distance_target_m,
+                    letter_error_m,
+                    letter_vx,
+                    letter_distance_adjust_count,
+                )
+            )
             time.sleep(0.25)
 
-            if ssi_check_retry_count > max_ssi_check_retry_count:
-                print("SSI_CHECK: 超限，重新等待单仪表盘")
-                _wait_single_dashboard(detector)
-                ssi_check_retry_count = 0
+            if letter_distance_adjust_count > max_letter_distance_adjust_count:
+                print("D{} LETTER_DISTANCE: 超限，回到LETTER_ALIGN".format(dashboard_index))
+                letter_state = "ALIGN"
+                letter_align_adjust_count = 0
+                letter_distance_adjust_count = 0
+            continue
 
-        # ----------------------------
-        # 五、普通循环：先读状态，再读字母
-        # ----------------------------
-        final_dashboard_state = _read_state_normal_loop(
-            detector,
-            need_frames=3,
-            max_frames=40,
+    # ----------------------------
+    # 三、普通循环：等待单仪表盘
+    # ----------------------------
+    _wait_single_dashboard(detector, robot)
+
+    # ----------------------------
+    # 四、普通if：只做ssi可见性检查
+    # ----------------------------
+    ssi_check_retry_count = 0
+    while True:
+        infer_output = detector.infer_once()
+        result = analyze_infer_output(infer_output)
+
+        if result["dashboard_count"] != 1:
+            print("D{} SSI_CHECK: 非单仪表盘，重新等待".format(dashboard_index))
+            _wait_single_dashboard(detector, robot)
+            ssi_check_retry_count = 0
+            continue
+
+        has_ssi = _has_ssi_detection(infer_output)
+        if has_ssi:
+            print("D{} SSI_CHECK: 已检测到ssi，进入读取仪表盘状态步骤".format(dashboard_index))
+            break
+
+        robot.DOWNmove(last_time=0.10, vx=-7000)
+        ssi_check_retry_count += 1
+        print("D{} SSI_CHECK: 未检测到ssi，后退微调，次数={}".format(dashboard_index, ssi_check_retry_count))
+        time.sleep(0.25)
+
+        if ssi_check_retry_count > max_ssi_check_retry_count:
+            print("D{} SSI_CHECK: 超限，重新等待单仪表盘".format(dashboard_index))
+            _wait_single_dashboard(detector, robot)
+            ssi_check_retry_count = 0
+
+    # ----------------------------
+    # 五、普通循环：先读状态，再读字母
+    # ----------------------------
+    final_dashboard_state = _read_state_normal_loop(
+        detector,
+        need_frames=3,
+        max_frames=40,
+    )
+    print("D{} 状态读取完成：{}".format(dashboard_index, final_dashboard_state))
+
+    final_letter = _read_letter_normal_loop(
+        detector,
+        need_frames=3,
+        max_frames=40,
+    )
+    print("D{} 字母读取完成：{}".format(dashboard_index, final_letter))
+
+    record = {
+        "dashboard_index": dashboard_index,
+        "dashboard_state": final_dashboard_state,
+        "letter": final_letter,
+    }
+    print("第{}个仪表盘记录完成：{}".format(dashboard_index, record))
+    return record
+
+
+def task2_new(robot, show_stream=False):
+    """
+    识别四个仪表盘，返回四条记录。
+    """
+    records = []
+
+    # ============================
+    # 第1个仪表盘
+    # ============================
+    # ----------------------------
+    # 一、先运动到第1个仪表盘附近
+    # ----------------------------
+    robot.move(last_time=2.5, vx=20000)
+    time.sleep(0.5)
+    robot.revolve_90_r()
+    time.sleep(0.5)
+
+    # ----------------------------
+    # 第1个仪表盘阈值
+    # ----------------------------
+    first_letter_x_center_min = 290
+    first_letter_x_center_max = 320
+    first_letter_distance_target_m = 0.35
+    first_letter_distance_tolerance_m = 0.05
+    first_max_letter_align_adjust_count = 5
+    first_max_letter_distance_adjust_count = 8
+    first_max_ssi_check_retry_count = 5
+
+    detector = SimpleInfer(show_stream=show_stream)
+    try:
+        first_record = _run_single_dashboard_with_detector(
+            detector=detector,
+            robot=robot,
+            dashboard_index=1,
+            letter_x_center_min=first_letter_x_center_min,
+            letter_x_center_max=first_letter_x_center_max,
+            letter_distance_target_m=first_letter_distance_target_m,
+            letter_distance_tolerance_m=first_letter_distance_tolerance_m,
+            max_letter_align_adjust_count=first_max_letter_align_adjust_count,
+            max_letter_distance_adjust_count=first_max_letter_distance_adjust_count,
+            max_ssi_check_retry_count=first_max_ssi_check_retry_count,
         )
-        print("状态读取完成：{}".format(final_dashboard_state))
-
-        final_letter = _read_letter_normal_loop(
-            detector,
-            need_frames=3,
-            max_frames=40,
-        )
-        print("字母读取完成：{}".format(final_letter))
-
-        # ----------------------------
-        # 六、记录结果（只三项）
-        # ----------------------------
-        record = {
-            "dashboard_index": 1,
-            "dashboard_state": final_dashboard_state,
-            "letter": final_letter,
-        }
-        records.append(record)
-        print("第一个仪表盘记录完成：{}".format(record))
-
+        records.append(first_record)
     finally:
         detector.close()
-        print("detector.close() done, task2_new finished")
+        print("D1 detector.close() done")
+
+    # ============================
+    # 第2个仪表盘
+    # ============================
+    # ----------------------------
+    # 一、先运动到第2个仪表盘附近
+    # ----------------------------
+    robot.revolve_90_l()
+    time.sleep(0.5)
+    robot.move(last_time =5.0, vx=20000)
+    time.sleep(0.5)
+    robot.revolve_90_r()
+    time.sleep(0.5)
+
+    # ----------------------------
+    # 第2个仪表盘阈值
+    # ----------------------------
+    second_letter_x_center_min = 290
+    second_letter_x_center_max = 320
+    second_letter_distance_target_m = 0.35
+    second_letter_distance_tolerance_m = 0.05
+    second_max_letter_align_adjust_count = 5
+    second_max_letter_distance_adjust_count = 8
+    second_max_ssi_check_retry_count = 5
+
+    detector = SimpleInfer(show_stream=show_stream)
+    try:
+        second_record = _run_single_dashboard_with_detector(
+            detector=detector,
+            robot=robot,
+            dashboard_index=2,
+            letter_x_center_min=second_letter_x_center_min,
+            letter_x_center_max=second_letter_x_center_max,
+            letter_distance_target_m=second_letter_distance_target_m,
+            letter_distance_tolerance_m=second_letter_distance_tolerance_m,
+            max_letter_align_adjust_count=second_max_letter_align_adjust_count,
+            max_letter_distance_adjust_count=second_max_letter_distance_adjust_count,
+            max_ssi_check_retry_count=second_max_ssi_check_retry_count,
+        )
+        records.append(second_record)
+    finally:
+        detector.close()
+        print("D2 detector.close() done")
+
+    # ============================
+    # 第3个仪表盘
+    # ============================
+    # ----------------------------
+    # 一、先运动到第3个仪表盘附近
+    # ----------------------------
+    robot.revolve_90_l()
+    time.sleep(0.5)
+    robot.move(last_time=2.0, vx=15000)
+    time.sleep(0.5)
+    robot.move(last_time=4.0, vy=15000)
+    time.sleep(0.5)
+    robot.move(last_time=2.0, vx=-15000)
+    time.sleep(0.5)
+    robot.revolve_90_l()
+    time.sleep(0.5)
+
+    # ----------------------------
+    # 第3个仪表盘阈值
+    # ----------------------------
+    third_letter_x_center_min = 290
+    third_letter_x_center_max = 320
+    third_letter_distance_target_m = 0.35
+    third_letter_distance_tolerance_m = 0.05
+    third_max_letter_align_adjust_count = 5
+    third_max_letter_distance_adjust_count = 8
+    third_max_ssi_check_retry_count = 5
+
+    detector = SimpleInfer(show_stream=show_stream)
+    try:
+        third_record = _run_single_dashboard_with_detector(
+            detector=detector,
+            robot=robot,
+            dashboard_index=3,
+            letter_x_center_min=third_letter_x_center_min,
+            letter_x_center_max=third_letter_x_center_max,
+            letter_distance_target_m=third_letter_distance_target_m,
+            letter_distance_tolerance_m=third_letter_distance_tolerance_m,
+            max_letter_align_adjust_count=third_max_letter_align_adjust_count,
+            max_letter_distance_adjust_count=third_max_letter_distance_adjust_count,
+            max_ssi_check_retry_count=third_max_ssi_check_retry_count,
+        )
+        records.append(third_record)
+    finally:
+        detector.close()
+        print("D3 detector.close() done")
+
+    # ============================
+    # 第4个仪表盘
+    # ============================
+    # ----------------------------
+    # 一、先运动到第4个仪表盘附近
+    # ----------------------------
+    robot.revolve_90_l()
+    time.sleep(0.5)
+    robot.move(last_time=5.0, vx=15000)
+    time.sleep(0.5)
+    robot.revolve_90_r()
+    time.sleep(0.5)
+
+    # ----------------------------
+    # 第4个仪表盘阈值
+    # ----------------------------
+    fourth_letter_x_center_min = 290
+    fourth_letter_x_center_max = 320
+    fourth_letter_distance_target_m = 0.35
+    fourth_letter_distance_tolerance_m = 0.05
+    fourth_max_letter_align_adjust_count = 5
+    fourth_max_letter_distance_adjust_count = 8
+    fourth_max_ssi_check_retry_count = 5
+
+    detector = SimpleInfer(show_stream=show_stream)
+    try:
+        fourth_record = _run_single_dashboard_with_detector(
+            detector=detector,
+            robot=robot,
+            dashboard_index=4,
+            letter_x_center_min=fourth_letter_x_center_min,
+            letter_x_center_max=fourth_letter_x_center_max,
+            letter_distance_target_m=fourth_letter_distance_target_m,
+            letter_distance_tolerance_m=fourth_letter_distance_tolerance_m,
+            max_letter_align_adjust_count=fourth_max_letter_align_adjust_count,
+            max_letter_distance_adjust_count=fourth_max_letter_distance_adjust_count,
+            max_ssi_check_retry_count=fourth_max_ssi_check_retry_count,
+        )
+        records.append(fourth_record)
+    finally:
+        detector.close()
+        print("D4 detector.close() done")
+
+    summary_list = []
+    for rec in records:
+        summary_list.append([rec["dashboard_index"], rec["letter"], rec["dashboard_state"]])
+    print("四个仪表盘汇总列表：{}".format(summary_list))
+    print("task2_new finished")
 
     return records
