@@ -194,6 +194,8 @@ def _run_single_dashboard_with_detector(
         if letter_state == "ALIGN":
             if letter_x_center < letter_x_center_min:
                 robot.move(last_time=0.12, vy=-15000)
+                time.sleep(0.5)
+                robot.move(last_time=0.05, vx=7000)
                 letter_align_adjust_count += 1
                 print("D{} LETTER_ALIGN: {} 偏左，左移，x_center={:.1f} 次数={}".format(dashboard_index, letter, letter_x_center, letter_align_adjust_count))
                 time.sleep(0.25)
@@ -229,9 +231,9 @@ def _run_single_dashboard_with_detector(
                 break
 
             if abs(letter_error_m) > 0.20:
-                letter_vx_abs = 15000
-            elif abs(letter_error_m) > 0.10:
                 letter_vx_abs = 10000
+            elif abs(letter_error_m) > 0.10:
+                letter_vx_abs = 9000
             else:
                 letter_vx_abs = 7000
 
@@ -324,31 +326,31 @@ def task2_new(robot, show_stream=False):
     识别四个仪表盘，返回四条记录。
     """
     records = []
-
-    # ============================
-    # 第1个仪表盘
-    # ============================
-    # ----------------------------
-    # 一、先运动到第1个仪表盘附近
-    # ----------------------------
-    robot.move(last_time=2.5, vx=20000)
-    time.sleep(0.5)
-    robot.revolve_90_r()
-    time.sleep(0.5)
-
-    # ----------------------------
-    # 第1个仪表盘阈值
-    # ----------------------------
-    first_letter_x_center_min = 290
-    first_letter_x_center_max = 320
-    first_letter_distance_target_m = 0.35
-    first_letter_distance_tolerance_m = 0.05
-    first_max_letter_align_adjust_count = 5
-    first_max_letter_distance_adjust_count = 8
-    first_max_ssi_check_retry_count = 5
-
     detector = SimpleInfer(show_stream=show_stream)
+
     try:
+        # ============================
+        # 第1个仪表盘
+        # ============================
+        # ----------------------------
+        # 一、先运动到第1个仪表盘附近
+        # ----------------------------
+        robot.move(last_time=2.5, vx=20000)
+        time.sleep(0.5)
+        robot.revolve_90_r()
+        time.sleep(0.5)
+
+        # ----------------------------
+        # 第1个仪表盘阈值
+        # ----------------------------
+        first_letter_x_center_min = 290
+        first_letter_x_center_max = 320
+        first_letter_distance_target_m = 0.35
+        first_letter_distance_tolerance_m = 0.05
+        first_max_letter_align_adjust_count = 5
+        first_max_letter_distance_adjust_count = 8
+        first_max_ssi_check_retry_count = 5
+
         first_record = _run_single_dashboard_with_detector(
             detector=detector,
             robot=robot,
@@ -362,37 +364,35 @@ def task2_new(robot, show_stream=False):
             max_ssi_check_retry_count=first_max_ssi_check_retry_count,
         )
         records.append(first_record)
-    finally:
-        detector.close()
-        print("D1 detector.close() done")
 
-    # ============================
-    # 第2个仪表盘
-    # ============================
-    # ----------------------------
-    # 一、先运动到第2个仪表盘附近
-    # ----------------------------
-    robot.UPDOWN()
-    robot.revolve_90_l()
-    time.sleep(0.5)
-    robot.move(last_time =5.0, vx=20000)
-    time.sleep(0.5)
-    robot.revolve_90_r()
-    time.sleep(0.5)
+        # ============================
+        # 第2个仪表盘
+        # ============================
+        # ----------------------------
+        # 一、先运动到第2个仪表盘附近
+        # ----------------------------
+        robot.UPDOWN()
+        time.sleep(0.5)
+        robot.revolve_90_l()
+        time.sleep(0.5)
+        robot.move(last_time=0.6, vy=15000)
+        time.sleep(0.5)
+        robot.move(last_time =5.5, vx=20000)
+        time.sleep(0.5)
+        robot.revolve_90_r()
+        time.sleep(0.5)
 
-    # ----------------------------
-    # 第2个仪表盘阈值
-    # ----------------------------
-    second_letter_x_center_min = 290
-    second_letter_x_center_max = 320
-    second_letter_distance_target_m = 0.35
-    second_letter_distance_tolerance_m = 0.05
-    second_max_letter_align_adjust_count = 5
-    second_max_letter_distance_adjust_count = 8
-    second_max_ssi_check_retry_count = 5
+        # ----------------------------
+        # 第2个仪表盘阈值
+        # ----------------------------
+        second_letter_x_center_min = 290
+        second_letter_x_center_max = 320
+        second_letter_distance_target_m = 0.35
+        second_letter_distance_tolerance_m = 0.05
+        second_max_letter_align_adjust_count = 5
+        second_max_letter_distance_adjust_count = 8
+        second_max_ssi_check_retry_count = 5
 
-    detector = SimpleInfer(show_stream=show_stream)
-    try:
         second_record = _run_single_dashboard_with_detector(
             detector=detector,
             robot=robot,
@@ -406,41 +406,37 @@ def task2_new(robot, show_stream=False):
             max_ssi_check_retry_count=second_max_ssi_check_retry_count,
         )
         records.append(second_record)
-    finally:
-        detector.close()
-        print("D2 detector.close() done")
 
-    # ============================
-    # 第3个仪表盘
-    # ============================
-    # ----------------------------
-    # 一、先运动到第3个仪表盘附近
-    # ----------------------------
-    robot.UPDOWN()
-    robot.revolve_90_l()
-    time.sleep(0.5)
-    robot.move(last_time=2.0, vx=15000)
-    time.sleep(0.5)
-    robot.move(last_time=4.0, vy=15000)
-    time.sleep(0.5)
-    robot.move(last_time=2.0, vx=-15000)
-    time.sleep(0.5)
-    robot.revolve_90_l()
-    time.sleep(0.5)
+        # ============================
+        # 第3个仪表盘
+        # ============================
+        # ----------------------------
+        # 一、先运动到第3个仪表盘附近
+        # ----------------------------
+        robot.UPDOWN()
+        time.sleep(0.5)
+        robot.revolve_90_l()
+        time.sleep(0.5)
+        robot.move(last_time=2.0, vx=15000)
+        time.sleep(0.5)
+        robot.move(last_time=4.0, vy=15000)
+        time.sleep(0.5)
+        robot.move(last_time=2.0, vx=-15000)
+        time.sleep(0.5)
+        robot.revolve_90_l()
+        time.sleep(0.5)
 
-    # ----------------------------
-    # 第3个仪表盘阈值
-    # ----------------------------
-    third_letter_x_center_min = 290
-    third_letter_x_center_max = 320
-    third_letter_distance_target_m = 0.35
-    third_letter_distance_tolerance_m = 0.05
-    third_max_letter_align_adjust_count = 5
-    third_max_letter_distance_adjust_count = 8
-    third_max_ssi_check_retry_count = 5
+        # ----------------------------
+        # 第3个仪表盘阈值
+        # ----------------------------
+        third_letter_x_center_min = 290
+        third_letter_x_center_max = 320
+        third_letter_distance_target_m = 0.35
+        third_letter_distance_tolerance_m = 0.05
+        third_max_letter_align_adjust_count = 5
+        third_max_letter_distance_adjust_count = 8
+        third_max_ssi_check_retry_count = 5
 
-    detector = SimpleInfer(show_stream=show_stream)
-    try:
         third_record = _run_single_dashboard_with_detector(
             detector=detector,
             robot=robot,
@@ -454,37 +450,33 @@ def task2_new(robot, show_stream=False):
             max_ssi_check_retry_count=third_max_ssi_check_retry_count,
         )
         records.append(third_record)
-    finally:
-        detector.close()
-        print("D3 detector.close() done")
 
-    # ============================
-    # 第4个仪表盘
-    # ============================
-    # ----------------------------
-    # 一、先运动到第4个仪表盘附近
-    # ----------------------------
-    robot.UPDOWN()
-    robot.revolve_90_l()
-    time.sleep(0.5)
-    robot.move(last_time=5.0, vx=15000)
-    time.sleep(0.5)
-    robot.revolve_90_r()
-    time.sleep(0.5)
+        # ============================
+        # 第4个仪表盘
+        # ============================
+        # ----------------------------
+        # 一、先运动到第4个仪表盘附近
+        # ----------------------------
+        robot.UPDOWN()
+        time.sleep(0.5)
+        robot.revolve_90_l()
+        time.sleep(0.5)
+        robot.move(last_time=5.0, vx=15000)
+        time.sleep(0.5)
+        robot.revolve_90_r()
+        time.sleep(0.5)
 
-    # ----------------------------
-    # 第4个仪表盘阈值
-    # ----------------------------
-    fourth_letter_x_center_min = 290
-    fourth_letter_x_center_max = 320
-    fourth_letter_distance_target_m = 0.35
-    fourth_letter_distance_tolerance_m = 0.05
-    fourth_max_letter_align_adjust_count = 5
-    fourth_max_letter_distance_adjust_count = 8
-    fourth_max_ssi_check_retry_count = 5
+        # ----------------------------
+        # 第4个仪表盘阈值
+        # ----------------------------
+        fourth_letter_x_center_min = 290
+        fourth_letter_x_center_max = 320
+        fourth_letter_distance_target_m = 0.35
+        fourth_letter_distance_tolerance_m = 0.05
+        fourth_max_letter_align_adjust_count = 5
+        fourth_max_letter_distance_adjust_count = 8
+        fourth_max_ssi_check_retry_count = 5
 
-    detector = SimpleInfer(show_stream=show_stream)
-    try:
         fourth_record = _run_single_dashboard_with_detector(
             detector=detector,
             robot=robot,
@@ -498,14 +490,15 @@ def task2_new(robot, show_stream=False):
             max_ssi_check_retry_count=fourth_max_ssi_check_retry_count,
         )
         records.append(fourth_record)
+
+        summary_list = []
+        for rec in records:
+            summary_list.append([rec["dashboard_index"], rec["letter"], rec["dashboard_state"]])
+        print("四个仪表盘汇总列表：{}".format(summary_list))
+        print("task2_new finished")
+
     finally:
         detector.close()
-        print("D4 detector.close() done")
-
-    summary_list = []
-    for rec in records:
-        summary_list.append([rec["dashboard_index"], rec["letter"], rec["dashboard_state"]])
-    print("四个仪表盘汇总列表：{}".format(summary_list))
-    print("task2_new finished")
+        print("detector.close() done")
 
     return records
