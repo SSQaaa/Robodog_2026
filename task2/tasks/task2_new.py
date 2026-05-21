@@ -266,6 +266,7 @@ def _run_single_dashboard_with_detector(
     # ----------------------------
     # 四、普通if：只做ssi可见性检查
     # ----------------------------
+    robot.UPDOWN()
     ssi_check_retry_count = 0
     while True:
         infer_output = detector.infer_once()
@@ -282,7 +283,7 @@ def _run_single_dashboard_with_detector(
             print("D{} SSI_CHECK: 已检测到ssi，进入读取仪表盘状态步骤".format(dashboard_index))
             break
 
-        robot.DOWNmove(last_time=0.10, vx=-7000)
+        robot.move(last_time=0.10, vx=-7000)
         ssi_check_retry_count += 1
         print("D{} SSI_CHECK: 未检测到ssi，后退微调，次数={}".format(dashboard_index, ssi_check_retry_count))
         time.sleep(0.25)
@@ -371,6 +372,7 @@ def task2_new(robot, show_stream=False):
     # ----------------------------
     # 一、先运动到第2个仪表盘附近
     # ----------------------------
+    robot.UPDOWN()
     robot.revolve_90_l()
     time.sleep(0.5)
     robot.move(last_time =5.0, vx=20000)
@@ -414,6 +416,7 @@ def task2_new(robot, show_stream=False):
     # ----------------------------
     # 一、先运动到第3个仪表盘附近
     # ----------------------------
+    robot.UPDOWN()
     robot.revolve_90_l()
     time.sleep(0.5)
     robot.move(last_time=2.0, vx=15000)
@@ -461,6 +464,7 @@ def task2_new(robot, show_stream=False):
     # ----------------------------
     # 一、先运动到第4个仪表盘附近
     # ----------------------------
+    robot.UPDOWN()
     robot.revolve_90_l()
     time.sleep(0.5)
     robot.move(last_time=5.0, vx=15000)
