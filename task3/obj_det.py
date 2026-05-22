@@ -11,7 +11,7 @@ import orbbec_native
 
 
 # =========================
-# ¬∑æ∂≈‰÷√
+# Ë∑ØÂæÑÈÖçÁΩÆ
 # =========================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -26,7 +26,7 @@ import yolov5_trt_cpp
 
 
 # =========================
-# ≤Œ ˝«¯
+# ÂèÇÊï∞Âå∫
 # =========================
 
 CONF_THRESH = 0.4
@@ -50,7 +50,7 @@ CLASS_NAMES = {
 
 
 # =========================
-# π§æﬂ¿‡
+# Â∑•ÂÖ∑Á±ª
 # =========================
 
 class DepthSmoother:
@@ -95,13 +95,13 @@ def yolo_to_original(box, img_w, img_h, input_size=640):
     pad_x = (input_size - new_w) / 2
     pad_y = (input_size - new_h) / 2
 
-    # step2: »•padding
+    # step2: Âéªpadding
     cx = (cx - pad_x) / scale
     cy = (cy - pad_y) / scale
     w = w / scale
     h = h / scale
 
-    # step3: ◊™xyxy
+    # step3: ËΩ¨xyxy
     x1 = int(cx - w / 2)
     y1 = int(cy - h / 2)
     x2 = int(cx + w / 2)
@@ -135,9 +135,11 @@ def draw_detection(frame, box, cls_id, conf, depth_mm, valid_count):
     cls_name = CLASS_NAMES.get(int(cls_id), f"id{int(cls_id)}")
 
     if depth_mm is not None and depth_mm > 0:
-        text = f"{cls_name} {conf:.2f} {depth_mm / 1000.0:.2f}m"
+        text = f"{cls_name} {conf:.2f}"
+        depth_text = f"{depth_mm / 1000.0:.2f}m"
     else:
         text = f"{cls_name} {conf:.2f} Depth Invalid"
+        depth_text = None
 
     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
@@ -149,6 +151,15 @@ def draw_detection(frame, box, cls_id, conf, depth_mm, valid_count):
         0.6,
         (0, 0, 255),
         2,
+    )
+    cv2.putText(
+        frame,
+        depth_text,
+        (x1, max(25, y1 + 30)),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1.0,
+        (255, 0, 255),
+        5,
     )
 
     cv2.putText(
@@ -163,7 +174,7 @@ def draw_detection(frame, box, cls_id, conf, depth_mm, valid_count):
 
 
 # =========================
-# ÷˜≥Ã–Ú
+# ‰∏ªÁ®ãÂ∫è
 # =========================
 
 def main():

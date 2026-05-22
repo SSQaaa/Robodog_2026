@@ -2,6 +2,7 @@
 """Move the arm back to the vendor default reset pose."""
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -33,6 +34,7 @@ def write_servo(packet, servo_id, position, speed, acc):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Reset SCServo robot arm pose")
+    parser.add_argument("--config", default=os.path.join(BASE_DIR, "calibration.json"))
     parser.add_argument("--dev", default="/dev/ttyUSB0", help="Servo serial device")
     parser.add_argument("--baudrate", type=int, default=500000)
     parser.add_argument("--speed", type=int, default=600)
@@ -42,19 +44,31 @@ def parse_args():
     return parser.parse_args()
 
 
+def load_config(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def main():
     args = parse_args()
+    config = load_config(args.config)
+    arm_cfg = config.get("arm", {})
     pose = dict(DEFAULT_POSE)
+    for servo_id, position in arm_cfg.get("reset_pose", {}).items():
+        pose[int(servo_id)] = int(position)
     if args.open_gripper:
         pose[1] = 2047
 
-    port = PortHandler(args.dev)
+    dev = arm_cfg.get("devicename", args.dev)
+    baudrate = int(arm_cfg.get("baudrate", args.baudrate))
+
+    port = PortHandler(dev)
     packet = sms_sts(port)
 
     if not port.openPort():
-        raise RuntimeError(f"Failed to open servo port: {args.dev}")
-    if not port.setBaudRate(args.baudrate):
-        raise RuntimeError(f"Failed to set baudrate: {args.baudrate}")
+        raise RuntimeError(f"Failed to open servo port: {dev}")
+    if not port.setBaudRate(baudrate):
+        raise RuntimeError(f"Failed to set baudrate: {baudrate}")
 
     try:
         # Move base and wrist first, then arm joints, then gripper.

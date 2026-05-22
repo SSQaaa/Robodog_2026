@@ -7,15 +7,22 @@ Use:Inverse kinematics algorithm for a three link manipulator(三连杆接机械
 import math
 
 
-def Arm(x=None, y=None, theta_deg=0):
+def Arm(x=None, y=None, theta_deg=0, link_lengths_mm=None, servo_centers=None):
 
     pi = 3.14
 
     # Define the length of each link
     # 定义连杆长度，单位为毫米
-    L1 = 105     # L1
-    L2 = 100     # L2
-    L3 = 120     # L3
+    if link_lengths_mm is None:
+        link_lengths_mm = {}
+    if servo_centers is None:
+        servo_centers = {}
+    L1 = float(link_lengths_mm.get("L1", 105))
+    L2 = float(link_lengths_mm.get("L2", 100))
+    L3 = float(link_lengths_mm.get("L3", 120))
+    center_3 = int(servo_centers.get("3", servo_centers.get(3, 2047)))
+    center_4 = int(servo_centers.get("4", servo_centers.get(4, 2047)))
+    center_5 = int(servo_centers.get("5", servo_centers.get(5, 2047)))
 
     # Define the end-effector position and orientation
     # 定义末端关节的位置为x,y，单位为毫米，姿态为theta（即 L3与X轴的夹角,这里设置为0 ），单位为弧度。这math.radians函数将角度转换为弧度
@@ -50,9 +57,9 @@ def Arm(x=None, y=None, theta_deg=0):
     #    3号:角度为正数 逆时针旋转 数值减小 -- 角度为负数 顺时针旋转 数值增大。
     # 4、5号:角度为正数 逆时针旋转 数值增大 -- 角度为负数 顺时针旋转 数值减小。
     # 所以4、5号舵机需要相加。3号舵机需要相减
-    angle_5 = int(2047 + int(math.degrees(q1) * 11.375))
-    angle_4 = int(2047 + int(math.degrees(q2) * 11.375))
-    angle_3 = int(2047 - int(math.degrees(q3) * 11.375))
+    angle_5 = int(center_5 + int(math.degrees(q1) * 11.375))
+    angle_4 = int(center_4 + int(math.degrees(q2) * 11.375))
+    angle_3 = int(center_3 - int(math.degrees(q3) * 11.375))
 
     # Print the results in radians and degrees
     # 分别显示弧度和角度。用math.degrees函数将弧度转换为角度

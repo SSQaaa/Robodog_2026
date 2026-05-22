@@ -4,13 +4,13 @@
   "tag_backend": "auto",
   "fixed_tag": {
     "id": 0,
-    "size_mm": 37.0,
+    "size_mm": 36.5,
     "T_base_tag": [
       [
         0.0,
         0.0,
         -1.0,
-        200.0
+        220.0
       ],
       [
         -1.0,
@@ -22,7 +22,7 @@
         0.0,
         -1.0,
         0.0,
-        18.5
+        0.0
       ],
       [
         0.0,
@@ -32,33 +32,97 @@
       ]
     ]
   },
-  "object_tag": {
-    "id": 1,
-    "size_mm": 38.0,
-    "grasp_offset_tag_mm": [
-      0.0,
-      0.0,
-      0.0
-    ],
-    "grasp_offset_base_mm": [
-      0.0,
-      30.0,
-      -50.0
-    ]
-  },
   "block": {
     "size_mm": [
       100.0,
       50.0,
       50.0
-    ]
+    ],
+    "plane_z_base_mm": 0.0,
+    "grasp_z_offset_mm": 0.0,
+    "grasp_offset_base_mm": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "hsv": {
+      "lower": [
+        35,
+        40,
+        40
+      ],
+      "upper": [
+        85,
+        255,
+        255
+      ]
+    },
+    "min_area_px": 500.0,
+    "morph_kernel_px": 5,
+    "depth_roi": {
+      "box_radius_px": 8,
+      "min_valid_count": 20
+    },
+    "calibration_samples": {
+      "recommended_samples": 60,
+      "min_samples": 20,
+      "max_sample_error_mm": 20.0
+    }
   },
-    "arm": {
-      "shoulder_height_mm": 85.0,
-      "gripper_offset_mm": 0.0,
-      "pre_grasp_lift_mm": 40.0,
-      "theta_candidates_deg": [-60.0, -45.0, -30.0, -15.0, 0.0, 15.0],
-      "devicename": "/dev/ttyUSB0",
+  "arm": {
+    "shoulder_height_mm": 65.0,
+    "link_lengths_mm": {
+      "L1": 150.0,
+      "L2": 145.0,
+      "L3": 120.0
+    },
+    "servo_centers": {
+      "3": 2047,
+      "4": 2047,
+      "5": 1000
+    },
+    "gripper_offset_mm": 0.0,
+    "pre_grasp_lift_mm": 40.0,
+    "theta_candidates_deg": [
+      -60.0,
+      -45.0,
+      -30.0,
+      -15.0,
+      0.0,
+      15.0
+    ],
+    "servo_preferences": {
+      "5": {
+        "preferred": 1000,
+        "weight": 0.3
+      }
+    },
+    "collision_limits": [
+      {
+        "name": "camera_clearance_servo4_servo5",
+        "type": "quadratic",
+        "servos": [
+          4,
+          5
+        ],
+        "unsafe_side": "below",
+        "margin": 50.0,
+        "coefficients": {
+          "a": 0.000373838646,
+          "b": -1.51828548,
+          "c": 1868.39239
+        }
+      }
+    ],
+    "reset_pose": {
+      "1": 2047,
+      "2": 2039,
+      "3": 2013,
+      "4": 1575,
+      "5": 1000,
+      "6": 2047
+    },
+    "devicename": "/dev/ttyUSB0",
     "baudrate": 500000,
     "moving_speed": 800,
     "moving_acc": 30,
@@ -97,22 +161,22 @@
   },
   "T_base_camera": [
     [
-      0.2370984065748174,
-      -0.26143065671630045,
-      0.9356486292025262,
-      -112.88817939595089
+      -0.044479126457953065,
+      -0.217857603613117,
+      0.974966497812867,
+      516.9413269466156
     ],
     [
-      -0.9711282484436179,
-      -0.0376587740028523,
-      0.23556685211513334,
-      -58.2948322170666
+      -0.9987153689885414,
+      -0.01401623764239898,
+      -0.04869452565158782,
+      37.772630440294556
     ],
     [
-      -0.026349016575834446,
-      -0.964487339714465,
-      -0.262811531056003,
-      91.19295657072664
+      0.024273834794254722,
+      -0.9758799155789104,
+      -0.21695430697287282,
+      12.851521164285398
     ],
     [
       0.0,

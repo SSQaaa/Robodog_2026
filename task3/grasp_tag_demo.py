@@ -1,5 +1,13 @@
 # -*- coding: utf-8 -*-
 """AprilTag guided grasp demo for Jetson Xavier + OrbbecCamera wrapper."""
+'''
+用法：
+python grasp_tag_demo.py camera-test --show
+python grasp_tag_demo.py calibrate-samples --samples 20 --min-samples 10
+python grasp_tag_demo.py block-test --show
+python grasp_tag_demo.py block-dry-run
+python grasp_tag_demo.py block-grasp --execute
+'''
 
 import argparse
 import json
@@ -12,15 +20,10 @@ import numpy as np
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-ARM_CODE_DIRS = [
-    BASE_DIR,
-    os.path.join(BASE_DIR, "sms_sts_three"),
-]
-for arm_code_dir in ARM_CODE_DIRS:
-    if os.path.isdir(arm_code_dir) and arm_code_dir not in sys.path:
-        sys.path.append(arm_code_dir)
-
-from three_Inverse_kinematics import Arm  # noqa: E402
+try:
+    from three_Inverse_kinematics import Arm  # noqa: E402
+except ModuleNotFoundError:
+    Arm = None
 
 
 try:
@@ -29,17 +32,22 @@ try:
         as_transform,
         base_point_to_arm_target,
         fixed_tag_camera_calibration,
+        pixel_to_camera,
         matrix_to_list,
-        object_tag_to_grasp_point,
     )
     from tag_detector import detect_tags, draw_tags, find_tag
 except ModuleNotFoundError:
     import math
 
-    import orbbec_native
+    try:
+        import orbbec_native
+    except ModuleNotFoundError:
+        orbbec_native = None
 
     class OrbbecCameraAdapter:
         def __init__(self, warmup_s=1.0):
+            if orbbec_native is None:
+                raise RuntimeError("orbbec_native is not available. Build/install the Orbbec wrapper on the robot.")
             self.cam = orbbec_native.OrbbecCamera()
             self.warmup_s = warmup_s
             self.color_intrinsics = None
@@ -111,8 +119,15 @@ except ModuleNotFoundError:
         out = as_transform(T) @ np.array([p[0], p[1], p[2], 1.0], dtype=np.float64)
         return out[:3]
 
-    def object_tag_to_grasp_point(T_base_tag, grasp_offset_tag_mm):
-        return transform_point(T_base_tag, grasp_offset_tag_mm)
+    def pixel_to_camera(u, v, depth_mm, intrinsics):
+        fx = float(intrinsics["fx"])
+        fy = float(intrinsics["fy"])
+        cx = float(intrinsics["cx"])
+        cy = float(intrinsics["cy"])
+        x = (float(u) - cx) * float(depth_mm) / fx
+        y = (float(v) - cy) * float(depth_mm) / fy
+        z = float(depth_mm)
+        return np.array([x, y, z], dtype=np.float64)
 
     def fixed_tag_camera_calibration(T_base_fixed_tag, T_camera_fixed_tag):
         return as_transform(T_base_fixed_tag) @ np.linalg.inv(as_transform(T_camera_fixed_tag))
@@ -362,6 +377,118 @@ def yaw_to_base_servo(yaw_deg, base_cfg):
     return int(round(clamp(raw, int(base_cfg["min"]), int(base_cfg["max"]))))
 
 
+def transform_point_local(T, point):
+    p = np.asarray(point, dtype=np.float64).reshape(3)
+    hp = np.array([p[0], p[1], p[2], 1.0], dtype=np.float64)
+    return (as_transform(T) @ hp)[:3]
+
+
+def camera_to_base_point(point_camera, T_base_camera):
+    return transform_point_local(T_base_camera, point_camera)
+
+
+def average_transforms(transforms):
+    mats = np.asarray([as_transform(T) for T in transforms], dtype=np.float64)
+    if mats.ndim != 3 or mats.shape[1:] != (4, 4):
+        raise ValueError("Expected a non-empty list of 4x4 transforms")
+
+    t_mean = np.mean(mats[:, :3, 3], axis=0)
+    R_mean = np.mean(mats[:, :3, :3], axis=0)
+    u, _, vt = np.linalg.svd(R_mean)
+    R = u @ vt
+    if np.linalg.det(R) < 0:
+        u[:, -1] *= -1
+        R = u @ vt
+
+    out = np.eye(4, dtype=np.float64)
+    out[:3, :3] = R
+    out[:3, 3] = t_mean
+    return out
+
+
+def filter_transform_samples(transforms, max_translation_error_mm):
+    if not transforms:
+        return [], np.zeros(3, dtype=np.float64), np.zeros(3, dtype=np.float64)
+
+    mats = np.asarray([as_transform(T) for T in transforms], dtype=np.float64)
+    translations = mats[:, :3, 3]
+    median_t = np.median(translations, axis=0)
+    errors = np.linalg.norm(translations - median_t, axis=1)
+    kept = [
+        transforms[i]
+        for i, err in enumerate(errors)
+        if err <= float(max_translation_error_mm)
+    ]
+    if not kept:
+        kept = list(transforms)
+    kept_t = np.asarray([as_transform(T)[:3, 3] for T in kept], dtype=np.float64)
+    return kept, np.mean(kept_t, axis=0), np.std(kept_t, axis=0)
+
+
+def hsv_bounds(block_cfg):
+    hsv_cfg = block_cfg.get("hsv", {})
+    lower = np.asarray(hsv_cfg.get("lower", [35, 40, 40]), dtype=np.uint8)
+    upper = np.asarray(hsv_cfg.get("upper", [85, 255, 255]), dtype=np.uint8)
+    return lower, upper
+
+
+def detect_green_block(frame_bgr, config):
+    block_cfg = config.get("block", {})
+    lower, upper = hsv_bounds(block_cfg)
+    min_area = float(block_cfg.get("min_area_px", 500.0))
+    kernel_size = int(block_cfg.get("morph_kernel_px", 5))
+    kernel_size = max(1, kernel_size)
+
+    hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, lower, upper)
+    kernel = np.ones((kernel_size, kernel_size), dtype=np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = [c for c in contours if cv2.contourArea(c) >= min_area]
+    if not contours:
+        return None, mask
+
+    contour = max(contours, key=cv2.contourArea)
+    area = float(cv2.contourArea(contour))
+    rect = cv2.minAreaRect(contour)
+    (cx, cy), (w, h), angle = rect
+    box = cv2.boxPoints(rect).astype(np.int32)
+    x, y, bw, bh = cv2.boundingRect(contour)
+
+    return {
+        "center": (float(cx), float(cy)),
+        "area": area,
+        "angle_deg": float(angle),
+        "rect_size": (float(w), float(h)),
+        "box": box,
+        "bbox": (int(x), int(y), int(x + bw), int(y + bh)),
+    }, mask
+
+
+def draw_block_detection(frame_bgr, detection, result=None):
+    if detection is None:
+        return frame_bgr
+    cv2.drawContours(frame_bgr, [detection["box"]], 0, (0, 255, 0), 2)
+    cx, cy = detection["center"]
+    cv2.circle(frame_bgr, (int(round(cx)), int(round(cy))), 5, (0, 0, 255), -1)
+    label = "green block"
+    if result is not None and result.get("depth_mm") is not None:
+        label = f"{label} {result['depth_mm'] / 1000.0:.2f}m"
+    x1, y1, _, _ = detection["bbox"]
+    cv2.putText(
+        frame_bgr,
+        label,
+        (x1, max(25, y1 - 10)),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.6,
+        (0, 255, 0),
+        2,
+    )
+    return frame_bgr
+
+
 def check_joint_limits(servo_targets, limits):
     for servo_id, value in servo_targets.items():
         key = str(servo_id)
@@ -385,7 +512,98 @@ def limit_margin(servo_targets, limits):
     return min(margins)
 
 
+def servo_preference_penalty(servo_targets, arm_cfg):
+    prefs = arm_cfg.get("servo_preferences", {})
+    penalty = 0.0
+    for servo_id, value in servo_targets.items():
+        pref = prefs.get(str(servo_id))
+        if not pref:
+            continue
+        if "min" in pref and int(value) < int(pref["min"]):
+            raise ValueError(f"Servo {servo_id} target {value} is below preference min {pref['min']}")
+        if "max" in pref and int(value) > int(pref["max"]):
+            raise ValueError(f"Servo {servo_id} target {value} is above preference max {pref['max']}")
+        if "preferred" in pref:
+            weight = float(pref.get("weight", 1.0))
+            penalty += abs(float(value) - float(pref["preferred"])) * weight
+    return penalty
+
+
+def interpolate_boundary(points, x):
+    pts = sorted((float(p[0]), float(p[1])) for p in points)
+    if not pts:
+        raise ValueError("collision boundary needs at least one point")
+    if x <= pts[0][0]:
+        return pts[0][1]
+    if x >= pts[-1][0]:
+        return pts[-1][1]
+    for (x0, y0), (x1, y1) in zip(pts[:-1], pts[1:]):
+        if x0 <= x <= x1:
+            if abs(x1 - x0) < 1e-9:
+                return max(y0, y1)
+            t = (x - x0) / (x1 - x0)
+            return y0 + t * (y1 - y0)
+    return pts[-1][1]
+
+
+def evaluate_collision_boundary(limit, x):
+    if str(limit.get("type", "points")).lower() == "quadratic":
+        coeffs = limit.get("coefficients", {})
+        a = float(coeffs.get("a", 0.0))
+        b = float(coeffs.get("b", 0.0))
+        c = float(coeffs.get("c", 0.0))
+        return a * x * x + b * x + c
+    return interpolate_boundary(limit.get("points", []), x)
+
+
+def check_collision_limits(servo_targets, arm_cfg):
+    for limit in arm_cfg.get("collision_limits", []):
+        servos = limit.get("servos", [])
+        if len(servos) != 2:
+            continue
+        x_servo = int(servos[0])
+        y_servo = int(servos[1])
+        if x_servo not in servo_targets or y_servo not in servo_targets:
+            continue
+
+        x_value = float(servo_targets[x_servo])
+        y_value = float(servo_targets[y_servo])
+        boundary = evaluate_collision_boundary(limit, x_value)
+        margin = float(limit.get("margin", 0.0))
+        unsafe_side = str(limit.get("unsafe_side", "below")).lower()
+
+        if unsafe_side == "below":
+            minimum_safe = boundary + margin
+            if y_value < minimum_safe:
+                raise ValueError(
+                    "Servo {} target {:.0f} is below camera safety boundary {:.0f} "
+                    "for servo {} target {:.0f}".format(
+                        y_servo,
+                        y_value,
+                        minimum_safe,
+                        x_servo,
+                        x_value,
+                    )
+                )
+        elif unsafe_side == "above":
+            maximum_safe = boundary - margin
+            if y_value > maximum_safe:
+                raise ValueError(
+                    "Servo {} target {:.0f} is above camera safety boundary {:.0f} "
+                    "for servo {} target {:.0f}".format(
+                        y_servo,
+                        y_value,
+                        maximum_safe,
+                        x_servo,
+                        x_value,
+                    )
+                )
+
+
 def solve_arm_with_theta(arm_target, arm_cfg):
+    if Arm is None:
+        raise RuntimeError("three_Inverse_kinematics.py is not available next to grasp_demo_orbbec.py")
+
     theta_candidates = arm_cfg.get("theta_candidates_deg", [0.0])
     limits = arm_cfg["joint_limits"]
     ids = arm_cfg["ids"]
@@ -398,6 +616,8 @@ def solve_arm_with_theta(arm_target, arm_cfg):
                 arm_target["reach_mm"],
                 arm_target["height_mm"],
                 theta_deg=float(theta_deg),
+                link_lengths_mm=arm_cfg.get("link_lengths_mm"),
+                servo_centers=arm_cfg.get("servo_centers"),
             )
             link_targets = {
                 ids["link3"]: angle_3,
@@ -405,15 +625,20 @@ def solve_arm_with_theta(arm_target, arm_cfg):
                 ids["link5"]: angle_5,
             }
             margin = limit_margin(link_targets, limits)
+            check_collision_limits(link_targets, arm_cfg)
+            preference_penalty = servo_preference_penalty(link_targets, arm_cfg)
+            score = float(margin) - preference_penalty
             print(
-                "[ThetaTry] theta={:.1f}, targets={}, margin={}".format(
+                "[ThetaTry] theta={:.1f}, targets={}, margin={}, pref_penalty={:.1f}, score={:.1f}".format(
                     float(theta_deg),
                     link_targets,
                     margin,
+                    preference_penalty,
+                    score,
                 )
             )
             check_joint_limits(link_targets, limits)
-            valid.append((margin, float(theta_deg), angle_3, angle_4, angle_5))
+            valid.append((score, margin, float(theta_deg), angle_3, angle_4, angle_5))
         except Exception as exc:
             errors.append((float(theta_deg), str(exc)))
             print(f"[ThetaTry] theta={float(theta_deg):.1f} rejected: {exc}")
@@ -422,8 +647,8 @@ def solve_arm_with_theta(arm_target, arm_cfg):
         raise ValueError(f"No valid IK theta candidate. Errors: {errors}")
 
     valid.sort(key=lambda item: item[0], reverse=True)
-    margin, theta_deg, angle_3, angle_4, angle_5 = valid[0]
-    print(f"[ThetaPick] theta={theta_deg:.1f}, margin={margin}")
+    score, margin, theta_deg, angle_3, angle_4, angle_5 = valid[0]
+    print(f"[ThetaPick] theta={theta_deg:.1f}, margin={margin}, score={score:.1f}")
     return angle_3, angle_4, angle_5, theta_deg
 
 
@@ -497,10 +722,9 @@ def wait_for_frame(camera):
 def detect_once(camera, config):
     frame = wait_for_frame(camera)
     intrinsics = camera.color_intrinsics
-    marker_size = float(config["object_tag"]["size_mm"])
+    marker_size = float(config["fixed_tag"]["size_mm"])
     marker_sizes = {
         int(config["fixed_tag"]["id"]): float(config["fixed_tag"]["size_mm"]),
-        int(config["object_tag"]["id"]): float(config["object_tag"]["size_mm"]),
     }
     detections = detect_tags(
         frame,
@@ -531,40 +755,70 @@ def resolve_T_base_camera(config, detections, allow_saved=True):
     raise RuntimeError("No fixed tag detected and no saved T_base_camera in calibration.json")
 
 
-def compute_grasp(config, detections, T_base_camera):
-    object_cfg = config["object_tag"]
-    obj = find_tag(detections, object_cfg["id"])
-    if obj is None:
-        raise RuntimeError(f"Object tag id {object_cfg['id']} not detected")
+def compute_block_grasp(config, camera, frame, T_base_camera):
+    block_cfg = config.get("block", {})
+    detection, mask = detect_green_block(frame, config)
+    if detection is None:
+        raise RuntimeError("Green block not detected. Adjust block.hsv or block.min_area_px in calibration.json")
 
-    T_base_object_tag = as_transform(T_base_camera) @ obj.T_camera_tag
-    grasp_point_base = object_tag_to_grasp_point(
-        T_base_object_tag,
-        object_cfg["grasp_offset_tag_mm"],
+    u, v = detection["center"]
+    depth_cfg = block_cfg.get("depth_roi", {})
+    depth_mm, valid_count = camera.get_depth_at_color_pixel(
+        u,
+        v,
+        box_radius=int(depth_cfg.get("box_radius_px", 8)),
+        min_valid_count=int(depth_cfg.get("min_valid_count", 20)),
     )
-    grasp_offset_base = np.asarray(object_cfg.get("grasp_offset_base_mm", [0.0, 0.0, 0.0]), dtype=np.float64)
+    if depth_mm is None:
+        raise RuntimeError(
+            "No valid depth at green block center "
+            f"(valid_count={valid_count}). Increase depth_roi.box_radius_px or improve depth view."
+        )
+
+    point_camera = pixel_to_camera(u, v, depth_mm, camera.color_intrinsics)
+    point_base_from_depth = camera_to_base_point(point_camera, T_base_camera)
+
+    size_mm = np.asarray(block_cfg.get("size_mm", [100.0, 50.0, 50.0]), dtype=np.float64)
+    if size_mm.size < 3:
+        raise ValueError("block.size_mm must contain [length, width, height]")
+    plane_z = float(block_cfg.get("plane_z_base_mm", 0.0))
+    grasp_z_offset = float(block_cfg.get("grasp_z_offset_mm", 0.0))
+    grasp_point_base = point_base_from_depth.copy()
+    grasp_point_base[2] = plane_z + float(size_mm[2]) * 0.5 + grasp_z_offset
+
+    grasp_offset_base = np.asarray(block_cfg.get("grasp_offset_base_mm", [0.0, 0.0, 0.0]), dtype=np.float64)
     grasp_point_base = grasp_point_base + grasp_offset_base
+
     arm_target = base_point_to_arm_target(
         grasp_point_base,
         gripper_offset_mm=config["arm"]["gripper_offset_mm"],
         shoulder_height_mm=config["arm"]["shoulder_height_mm"],
     )
-
     print(
-        "[ArmDebug] grasp_point_base=({:.1f}, {:.1f}, {:.1f}) mm".format(
+        "[BlockDebug] point_camera=({:.1f}, {:.1f}, {:.1f}) mm, "
+        "point_base_from_depth=({:.1f}, {:.1f}, {:.1f}) mm, "
+        "grasp_point_base=({:.1f}, {:.1f}, {:.1f}) mm".format(
+            point_camera[0],
+            point_camera[1],
+            point_camera[2],
+            point_base_from_depth[0],
+            point_base_from_depth[1],
+            point_base_from_depth[2],
             grasp_point_base[0],
             grasp_point_base[1],
             grasp_point_base[2],
         )
     )
     print(
-        "[ArmDebug] yaw={:.1f} deg, reach={:.1f} mm, height={:.1f} mm".format(
+        "[BlockDebug] arm_target yaw={:.1f} deg, reach={:.1f} mm, height={:.1f} mm, "
+        "gripper_offset={:.1f} mm, shoulder_height={:.1f} mm".format(
             arm_target["yaw_deg"],
             arm_target["reach_mm"],
             arm_target["height_mm"],
+            float(config["arm"]["gripper_offset_mm"]),
+            float(config["arm"]["shoulder_height_mm"]),
         )
     )
-
     angle_3, angle_4, angle_5, theta_deg = solve_arm_with_theta(arm_target, config["arm"])
     servo_targets = {
         config["arm"]["ids"]["base"]: yaw_to_base_servo(arm_target["yaw_deg"], config["arm"]["base_servo"]),
@@ -574,9 +828,13 @@ def compute_grasp(config, detections, T_base_camera):
     }
 
     return {
-        "object_tag_id": obj.tag_id,
-        "object_tag_center": obj.center,
-        "T_base_object_tag": T_base_object_tag,
+        "detection": detection,
+        "mask": mask,
+        "pixel": (float(u), float(v)),
+        "depth_mm": int(depth_mm),
+        "valid_count": int(valid_count),
+        "point_camera": point_camera,
+        "point_base_from_depth": point_base_from_depth,
         "grasp_point_base": grasp_point_base,
         "arm_target": arm_target,
         "theta_deg": theta_deg,
@@ -591,12 +849,23 @@ def print_camera_info(camera):
     print(f"[Orbbec] color intrinsics: {camera.color_intrinsics}")
 
 
-def print_grasp_result(result, source):
+def print_block_result(result, source):
     p = result["grasp_point_base"]
+    raw = result["point_base_from_depth"]
+    cam = result["point_camera"]
     target = result["arm_target"]
     print(f"[Calibration] T_base_camera source: {source}")
-    print(f"[Object] tag id: {result['object_tag_id']}, center: {result['object_tag_center']}")
-    print(f"[Base] grasp XYZ: ({p[0]:.1f}, {p[1]:.1f}, {p[2]:.1f}) mm")
+    print(
+        "[Block] pixel=({:.1f},{:.1f}), depth={} mm, valid={}".format(
+            result["pixel"][0],
+            result["pixel"][1],
+            result["depth_mm"],
+            result["valid_count"],
+        )
+    )
+    print("[Camera] point XYZ=({:.1f}, {:.1f}, {:.1f}) mm".format(cam[0], cam[1], cam[2]))
+    print("[Base] depth XYZ=({:.1f}, {:.1f}, {:.1f}) mm".format(raw[0], raw[1], raw[2]))
+    print("[Base] grasp XYZ=({:.1f}, {:.1f}, {:.1f}) mm".format(p[0], p[1], p[2]))
     print(
         "[Arm] yaw={:.1f} deg, reach={:.1f} mm, height={:.1f} mm, theta={:.1f} deg".format(
             target["yaw_deg"],
@@ -646,15 +915,110 @@ def run_calibrate(args, config):
         camera.stop()
 
 
-def run_dry_or_grasp(args, config):
+def run_calibrate_samples(args, config):
+    camera = OrbbecCameraAdapter().start()
+    samples = []
+    misses = 0
+    try:
+        print_camera_info(camera)
+        print(
+            "[Calibration] collecting up to {} samples, need at least {}".format(
+                args.samples,
+                args.min_samples,
+            )
+        )
+        for i in range(int(args.samples)):
+            _, detections = detect_once(camera, config)
+            T = calibrate_from_fixed_tag(config, detections)
+            if T is None:
+                misses += 1
+                print(f"[Calibration] sample {i + 1}/{args.samples}: fixed tag not detected")
+            else:
+                samples.append(T)
+                t = T[:3, 3]
+                print(
+                    "[Calibration] sample {}/{}: t=({:.1f}, {:.1f}, {:.1f}) mm".format(
+                        i + 1,
+                        args.samples,
+                        t[0],
+                        t[1],
+                        t[2],
+                    )
+                )
+            time.sleep(float(args.sample_delay))
+
+        if len(samples) < int(args.min_samples):
+            raise RuntimeError(
+                f"Only collected {len(samples)} valid samples; need at least {args.min_samples}. "
+                "Keep the fixed tag flat, fully visible, and well lit."
+            )
+
+        kept, t_mean, t_std = filter_transform_samples(samples, args.max_sample_error_mm)
+        T = average_transforms(kept)
+        config["T_base_camera"] = matrix_to_list(T)
+        save_config(args.config, config)
+
+        print(
+            "[Calibration] valid={}, kept={}, missed={}, translation std=({:.2f}, {:.2f}, {:.2f}) mm".format(
+                len(samples),
+                len(kept),
+                misses,
+                t_std[0],
+                t_std[1],
+                t_std[2],
+            )
+        )
+        print(
+            "[Calibration] translation mean=({:.2f}, {:.2f}, {:.2f}) mm".format(
+                t_mean[0],
+                t_mean[1],
+                t_mean[2],
+            )
+        )
+        print("[Calibration] saved averaged T_base_camera:")
+        print(np.array2string(T, precision=3, suppress_small=True))
+    finally:
+        camera.stop()
+
+
+def run_block_test(args, config):
+    camera = OrbbecCameraAdapter().start()
+    try:
+        print_camera_info(camera)
+        frame = wait_for_frame(camera)
+        detections = []
+        try:
+            _, detections = detect_once(camera, config)
+        except RuntimeError as exc:
+            print(f"[Tag] live fixed-tag detection skipped: {exc}")
+        T_base_camera, source = resolve_T_base_camera(config, detections, allow_saved=True)
+        result = compute_block_grasp(config, camera, frame, T_base_camera)
+        print_block_result(result, source)
+        if args.show:
+            draw_block_detection(frame, result["detection"], result)
+            cv2.imshow("Green Block Test", frame)
+            cv2.imshow("Green Block Mask", result["mask"])
+            cv2.waitKey(0)
+    finally:
+        camera.stop()
+        if args.show:
+            cv2.destroyAllWindows()
+
+
+def run_block_dry_or_grasp(args, config):
     camera = OrbbecCameraAdapter().start()
     arm = None
     try:
         print_camera_info(camera)
-        _, detections = detect_once(camera, config)
+        frame = wait_for_frame(camera)
+        detections = []
+        try:
+            _, detections = detect_once(camera, config)
+        except RuntimeError as exc:
+            print(f"[Tag] live fixed-tag detection skipped: {exc}")
         T_base_camera, source = resolve_T_base_camera(config, detections, allow_saved=True)
-        result = compute_grasp(config, detections, T_base_camera)
-        print_grasp_result(result, source)
+        result = compute_block_grasp(config, camera, frame, T_base_camera)
+        print_block_result(result, source)
 
         if not args.execute:
             print("[DryRun] not moving servos. Add --execute to move the arm.")
@@ -688,12 +1052,28 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Orbbec AprilTag grasp demo")
     parser.add_argument(
         "mode",
-        choices=["camera-test", "calibrate", "dry-run", "grasp"],
-        help="Run mode. grasp also requires --execute to move servos.",
+        choices=[
+            "camera-test",
+            "calibrate",
+            "calibrate-samples",
+            "block-test",
+            "block-dry-run",
+            "block-grasp",
+        ],
+        help="Run mode. block-grasp also requires --execute to move servos.",
     )
     parser.add_argument("--config", default=os.path.join(BASE_DIR, "calibration.json"))
     parser.add_argument("--show", action="store_true", help="Show detected tag window in camera-test")
     parser.add_argument("--execute", action="store_true", help="Actually move servos")
+    parser.add_argument("--samples", type=int, default=60, help="Frame count for calibrate-samples")
+    parser.add_argument("--min-samples", type=int, default=20, help="Minimum valid fixed-tag samples")
+    parser.add_argument("--sample-delay", type=float, default=0.05, help="Delay between calibration samples in seconds")
+    parser.add_argument(
+        "--max-sample-error-mm",
+        type=float,
+        default=20.0,
+        help="Reject calibration samples farther than this from the median translation",
+    )
     return parser.parse_args()
 
 
@@ -705,10 +1085,14 @@ def main():
         run_camera_test(args, config)
     elif args.mode == "calibrate":
         run_calibrate(args, config)
-    elif args.mode in ("dry-run", "grasp"):
-        if args.mode == "grasp" and not args.execute:
-            print("[Safety] grasp mode selected without --execute, running as dry-run.")
-        run_dry_or_grasp(args, config)
+    elif args.mode == "calibrate-samples":
+        run_calibrate_samples(args, config)
+    elif args.mode == "block-test":
+        run_block_test(args, config)
+    elif args.mode in ("block-dry-run", "block-grasp"):
+        if args.mode == "block-grasp" and not args.execute:
+            print("[Safety] block-grasp mode selected without --execute, running as dry-run.")
+        run_block_dry_or_grasp(args, config)
 
 
 if __name__ == "__main__":
