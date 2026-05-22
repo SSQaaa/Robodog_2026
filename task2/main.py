@@ -19,6 +19,9 @@ if __name__ == "__main__":
 
     # 任务二
     # task2(robot)
+    # 旋转测试
+    # robot.move(last_time=3, vz=10000)
+    # time.sleep(0.5)
     # 新的任务二
     task2_new(robot, show_stream=args.stream)
 
