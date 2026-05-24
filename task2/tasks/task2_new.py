@@ -231,9 +231,9 @@ def _run_single_dashboard_with_detector(
                 break
 
             if abs(letter_error_m) > 0.20:
-                letter_vx_abs = 10000
+                letter_vx_abs = 8000
             elif abs(letter_error_m) > 0.10:
-                letter_vx_abs = 9000
+                letter_vx_abs = 7500
             else:
                 letter_vx_abs = 7000
 
@@ -285,6 +285,7 @@ def _run_single_dashboard_with_detector(
         has_ssi = _has_ssi_detection(infer_output)
         if has_ssi:
             print("D{} SSI_CHECK: 已检测到ssi，进入读取仪表盘状态步骤".format(dashboard_index))
+            time.sleep(0.7)
             break
 
         robot.move(last_time=0.10, vx=-7000)
@@ -377,9 +378,9 @@ def task2_new(robot, show_stream=False):
         time.sleep(0.5)
         robot.revolve_90_l()
         time.sleep(0.5)
-        robot.move(last_time=0.5, vz=10000) #定
+        robot.move(last_time=0.36, vz=10000) #定
         time.sleep(0.5)
-        robot.move(last_time =5.75, vx=20000)   #定
+        robot.move(last_time =5.5, vx=20000)   #定
         time.sleep(0.5)
         robot.revolve_90_r()
         time.sleep(0.5)
@@ -419,15 +420,15 @@ def task2_new(robot, show_stream=False):
         time.sleep(0.5)
         robot.revolve_90_l()
         time.sleep(0.5)
-        robot.move(last_time=0.33, vz=10000)
+        robot.move(last_time=0.25, vz=10000)
         time.sleep(0.5)
         robot.move(last_time=1.7, vx=15000)
         time.sleep(0.5)
         robot.revolve_90_l()
         time.sleep(0.5)
-        robot.move(last_time=4, vx=-15000)
+        robot.move(last_time=4.8, vx=-15000)
         time.sleep(0.5)
-        robot.move(last_time=5.5, vy=-20000)
+        robot.move(last_time=5.8, vy=-20000)
         time.sleep(0.5)
 
         # ----------------------------
