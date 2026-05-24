@@ -195,7 +195,7 @@ def _run_single_dashboard_with_detector(
             if letter_x_center < letter_x_center_min:
                 robot.move(last_time=0.12, vy=-15000)
                 time.sleep(0.5)
-                robot.move(last_time=0.03, vx=7000)
+                robot.move(last_time=0.01, vx=7000)
                 letter_align_adjust_count += 1
                 print("D{} LETTER_ALIGN: {} 偏左，左移，x_center={:.1f} 次数={}".format(dashboard_index, letter, letter_x_center, letter_align_adjust_count))
                 time.sleep(0.25)
@@ -268,7 +268,7 @@ def _run_single_dashboard_with_detector(
     # ----------------------------
     # 四、普通if：只做ssi可见性检查
     # ----------------------------
-    time.sleep(0.8)
+    time.sleep(1.2)
     robot.UPDOWN()
     time.sleep(0.8)
     ssi_check_retry_count = 0
@@ -377,9 +377,9 @@ def task2_new(robot, show_stream=False):
         time.sleep(0.5)
         robot.revolve_90_l()
         time.sleep(0.5)
-        robot.move(last_time=0.6, vz=10000)
+        robot.move(last_time=0.5, vz=10000) #定
         time.sleep(0.5)
-        robot.move(last_time =5.5, vx=20000)
+        robot.move(last_time =5.75, vx=20000)   #定
         time.sleep(0.5)
         robot.revolve_90_r()
         time.sleep(0.5)
@@ -419,17 +419,15 @@ def task2_new(robot, show_stream=False):
         time.sleep(0.5)
         robot.revolve_90_l()
         time.sleep(0.5)
-        robot.move(last_time=0.3, vz=10000)
+        robot.move(last_time=0.33, vz=10000)
         time.sleep(0.5)
-        robot.move(last_time=2, vx=15000)
+        robot.move(last_time=1.7, vx=15000)
         time.sleep(0.5)
         robot.revolve_90_l()
         time.sleep(0.5)
         robot.move(last_time=4, vx=-15000)
         time.sleep(0.5)
-        robot.move(last_time=4.5, vy=-20000)
-        time.sleep(0.5)
-        robot.revolve_90_l()
+        robot.move(last_time=5.5, vy=-20000)
         time.sleep(0.5)
 
         # ----------------------------
@@ -467,7 +465,7 @@ def task2_new(robot, show_stream=False):
         time.sleep(0.5)
         robot.revolve_90_l()
         time.sleep(0.5)
-        robot.move(last_time=0.3, vz=10000)
+        robot.move(last_time=0.2, vz=10000)
         time.sleep(0.5)
         robot.move(last_time=5.5, vx=20000)
         time.sleep(0.5)
