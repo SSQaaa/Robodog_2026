@@ -86,7 +86,7 @@ def scale_box(box, src_size, dst_size):
 def yolo_to_original(box, img_w, img_h, input_size=640):
     cx, cy, w, h = box
 
-    # step1: scale
+    # 第一步：按 YOLO 输入尺寸等比例缩放。
     scale = min(input_size / img_w, input_size / img_h)
 
     new_w = img_w * scale
@@ -95,19 +95,19 @@ def yolo_to_original(box, img_w, img_h, input_size=640):
     pad_x = (input_size - new_w) / 2
     pad_y = (input_size - new_h) / 2
 
-    # step2: 去padding
+    # 第二步：去掉 letterbox 的填充。
     cx = (cx - pad_x) / scale
     cy = (cy - pad_y) / scale
     w = w / scale
     h = h / scale
 
-    # step3: 转xyxy
+    # 第三步：转换为 xyxy 框。
     x1 = int(cx - w / 2)
     y1 = int(cy - h / 2)
     x2 = int(cx + w / 2)
     y2 = int(cy + h / 2)
 
-    # clip
+    # 限制到原图范围内。
     x1 = max(0, min(img_w - 1, x1))
     x2 = max(0, min(img_w - 1, x2))
     y1 = max(0, min(img_h - 1, y1))

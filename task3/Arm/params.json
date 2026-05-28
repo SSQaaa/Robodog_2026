@@ -1,0 +1,174 @@
+{
+  "units": "mm",
+  "camera": {
+    "warmup_s": 1.0,
+    "tag_family": "tag36h11",
+    "tag_id": 0,
+    "tag_size_mm": 26.0,
+    "T_base_tag": [
+      [
+        0.0,
+        0.0,
+        1.0,
+        445.0
+      ],
+      [
+        -1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        -1.0,
+        0.0,
+        140.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "T_base_camera": [
+      [
+        0.31731609255503956,
+        -0.12702894027312386,
+        0.9397734544764975,
+        167.70636508331614
+      ],
+      [
+        -0.9482183091679237,
+        -0.028000408972934814,
+        0.31638270378779015,
+        -43.06952746607898
+      ],
+      [
+        -0.013875718515659033,
+        -0.9915037193225429,
+        -0.12933614732640902,
+        138.0546238709035
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ]
+  },
+  "block": {
+    "size_mm": [
+      100.0,
+      50.0,
+      50.0
+    ],
+    "table_z_base_mm": 120.0,
+    "grasp_z_offset_mm": 0.0,
+    "grasp_offset_base_mm": [
+      40.0,
+      0.0,
+      0.0
+    ],
+    "hsv_lower": [
+      35,
+      40,
+      40
+    ],
+    "hsv_upper": [
+      85,
+      255,
+      255
+    ],
+    "min_area_px": 500.0,
+    "morph_kernel_px": 5,
+    "depth_box_radius_px": 8,
+    "min_valid_depth_count": 20
+  },
+  "arm": {
+    "devicename": "/dev/ttyUSB0",
+    "baudrate": 500000,
+    "moving_speed": 600,
+    "moving_acc": 10,
+    "ids": {
+      "gripper": 1,
+      "gripper_rotate": 2,
+      "wrist": 3,
+      "elbow": 4,
+      "shoulder": 5,
+      "base": 6
+    },
+    "link_lengths_mm": {
+      "L1": 150.0,
+      "L2": 145.0,
+      "L3": 80.0
+    },
+    "shoulder_height_mm": 20.0,
+    "gripper_offset_mm": 160.0,
+    "pre_grasp_lift_mm": 100.0,
+    "horizontal_sum_deg": 90.0,
+    "ticks_per_degree": 11.377777777777778,
+    "camera_safety": {
+      "enabled": true,
+      "center_base_mm": [
+        150.0,
+        0.0,
+        80.0
+      ],
+      "radius_mm": 30.0
+    },
+    "servos": {
+      "1": {
+        "min": 1000,
+        "max": 2400
+      },
+      "2": {
+        "min": 0,
+        "max": 4095
+      },
+      "3": {
+        "zero": 2047,
+        "direction": 1,
+        "min": 470,
+        "max": 3400
+      },
+      "4": {
+        "zero": 2060,
+        "direction": -1,
+        "min": 700,
+        "max": 3400
+      },
+      "5": {
+        "zero": 1000,
+        "direction": -1,
+        "min": 300,
+        "max": 1700
+      },
+      "6": {
+        "zero": 2047,
+        "direction": -1,
+        "min": 0,
+        "max": 4095
+      }
+    },
+    "gripper": {
+      "open": 2000,
+      "close": 2200,
+      "current_limit_units": 80,
+      "current_ma_per_unit": 6.5,
+      "close_step_ticks": 20,
+      "retreat_ticks": 30,
+      "sample_interval_s": 0.05,
+      "max_close_s": 2.0
+    },
+    "reset_pose": {
+      "1": 2000,
+      "2": 2047,
+      "3": 2047,
+      "4": 2060,
+      "5": 1000,
+      "6": 2047
+    }
+  }
+}
