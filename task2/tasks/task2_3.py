@@ -82,7 +82,7 @@ def rotate_to_relative_yaw(robot, target_yaw_deg, tolerance_deg=2.0):
     stable_need_frames = 3
     max_adjust_steps = 40
     yaw_vz_small = 10000
-    yaw_vz_large = 15000
+    yaw_vz_large = 12000
     stable_count = 0
 
     for step in range(max_adjust_steps):
@@ -129,7 +129,7 @@ def rotate_to_relative_yaw(robot, target_yaw_deg, tolerance_deg=2.0):
                 vz_cmd,
             )
         )
-        robot.move(last_time=0.08, vz=vz_cmd)
+        robot.move(last_time=0.06, vz=vz_cmd)
         time.sleep(0.8)
 
     print("YAW: 达到最大调整次数，按当前角度继续")
