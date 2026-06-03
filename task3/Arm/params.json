@@ -67,8 +67,8 @@
     "table_z_base_mm": 120.0,
     "grasp_z_offset_mm": 0.0,
     "grasp_offset_base_mm": [
-      40.0,
       0.0,
+      -15.0,
       0.0
     ],
     "hsv_lower": [
@@ -106,7 +106,9 @@
     },
     "shoulder_height_mm": 20.0,
     "gripper_offset_mm": 160.0,
-    "pre_grasp_lift_mm": 100.0,
+    "pre_grasp_lift_mm": 40.0,
+    "post_grasp_lift_mm": 100.0,
+    "place_height_above_table_mm": 150.0,
     "horizontal_sum_deg": 90.0,
     "ticks_per_degree": 11.377777777777778,
     "camera_safety": {
@@ -140,10 +142,10 @@
         "max": 3400
       },
       "5": {
-        "zero": 1000,
+        "zero": 3375,
         "direction": -1,
-        "min": 300,
-        "max": 1700
+        "min": 2675,
+        "max": 4075
       },
       "6": {
         "zero": 2047,
@@ -153,7 +155,7 @@
       }
     },
     "gripper": {
-      "open": 2000,
+      "open": 1900,
       "close": 2200,
       "current_limit_units": 80,
       "current_ma_per_unit": 6.5,
@@ -163,11 +165,11 @@
       "max_close_s": 2.0
     },
     "reset_pose": {
-      "1": 2000,
+      "1": 1900,
       "2": 2047,
       "3": 2047,
       "4": 2060,
-      "5": 1000,
+      "5": 3375,
       "6": 2047
     }
   }

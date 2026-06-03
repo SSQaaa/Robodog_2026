@@ -1,148 +1,248 @@
-# Task3 搬运任务
+# Task3 现场运行与舵机维护说明
 
-本目录用于完成任务三：根据仪表盘状态抓取红色或绿色物块，并把物块放到对应的 A/B/C/D 箱子上。
+本目录是任务三主程序，包含视觉识别、机器狗移动、机械臂抓取和放置流程。
 
-主流程入口是 `task3.py`。代码按职责拆开：
-
-- `task3.py`：任务编排，只负责把视觉、机械臂、机器狗运动串起来。
-- `vision_control.py`：视觉识别，只负责 TensorRT YOLO + Orbbec 深度，输出目标类别、中心点、框和深度。
-- `arm_control.py`：机械臂控制，只负责把视觉目标转换成机械臂目标点，并执行抓取/松爪。
-- `dog_control.py`：机器狗运动控制，只负责 UDP 运动指令。
-- `Arm/`：最新机械臂程序和参数，包括 IK、舵机驱动、标定、复位和单独抓取测试。
-- `obj_det.py`：YOLO + 深度检测参考脚本，可单独验证模型和相机。
-
-## 运行主任务
-
-在机器人上进入本目录或项目根目录后运行：
+## 常用入口
 
 ```bash
+cd ~/Desktop/2026Project/task3
 python task3.py
 ```
 
-或者从项目根目录运行：
+机械臂相关工具在 `Arm/` 目录下，也可以从 `task3` 根目录用 `python Arm/xxx.py` 运行。
 
-```bash
-python 2026Project/task3/task3.py
-```
+## 舵机 ID 与波特率
 
-`task3.py` 不使用命令行参数。比赛现场需要改参数时，直接修改文件顶部常量：
+项目默认使用 `/dev/ttyUSB0`，波特率为 `500000`。配置位置：
 
-```python
-DASHBOARD_STATUS = {
-    "A": "异常",
-    "B": "正常",
-    "C": "异常",
-    "D": "正常",
+```json
+"arm": {
+  "devicename": "/dev/ttyUSB0",
+  "baudrate": 500000
 }
-
-ARM_DRY_RUN = False
-INITIAL_BOX_FORWARD_SECONDS = 2.0
-RETURN_FORWARD_SECONDS = 5.0
-CENTER_TOLERANCE_PX = 60
-BOX_TARGET_DEPTH_MM = 600
 ```
 
-状态映射规则：
+当前机械臂舵机 ID 约定：
 
-- `异常` -> 抓 `Red`
-- `正常` -> 抓 `Green`
+| 关节 | ID |
+| --- | --- |
+| gripper | 1 |
+| gripper_rotate | 2 |
+| wrist | 3 |
+| elbow | 4 |
+| shoulder | 5 |
+| base | 6 |
 
-## 主流程
-
-每个字母按 `A/B/C/D` 顺序执行：
-
-1. 根据状态选择 `Red` 或 `Green`。
-2. 视觉检测对应颜色物块，并取得深度。
-3. 机械臂抓取物块。
-4. 机器狗原地转 180 度。
-5. 向箱子方向先走 `2s`。
-6. YOLO 检测目标字母 `A/B/C/D`。
-7. 左右平移，直到字母接近画面中心。
-8. 根据字母深度向前靠近箱子。
-9. 机械臂松爪放下物块。
-10. 机器狗原地转 180 度。
-11. 直走 `5s` 回到取物区，继续下一轮。
-
-## 机械臂参数和工具
-
-机械臂最新代码在 `Arm/` 目录中。主任务读取：
+如果状态里出现类似：
 
 ```text
-Arm/params.json
+id5:ERR pos_result=-6, pos_error=0
 ```
 
-其中最重要的是：
+通常表示程序按 `id=5` 读取舵机时没有收到正常回复。常见原因是新舵机的 ID 不是 5、波特率不是 500000、接线/供电异常，或者协议型号不匹配。
 
-- `camera.T_base_camera`：相机到机械臂基座的标定矩阵。
-- `block`：物块尺寸、桌面高度、抓取偏移等。
-- `arm`：舵机 ID、连杆长度、舵机限位、抓手参数。
+## 扫描舵机 ID
 
-常用机械臂命令需要在 `Arm/` 目录下执行：
+新增脚本：
+
+```text
+Arm/scan_servo_ids.py
+```
+
+默认使用 `Arm/params.json` 里的串口和波特率，扫描 `0-20`：
 
 ```bash
-cd Arm
-python reset_arm.py
-python reset_arm.py --open-gripper
-python monitor_servos.py --ids 3 4 5 --single-line
-python disable_servos.py
-python disable_servos.py --enable --ids 3 4 5
+cd ~/Desktop/2026Project/task3
+python Arm/scan_servo_ids.py
 ```
 
-标定相机到机械臂基座：
+扫描指定范围：
 
 ```bash
-cd Arm
-python calibration.py --samples 60 --save
+python Arm/scan_servo_ids.py --ids 1-6
+python Arm/scan_servo_ids.py --ids 0-252
 ```
 
-单独测试机械臂视觉抓取：
+扫描指定波特率：
 
 ```bash
-cd Arm
-python vision_grasp.py --dry-run
-python vision_grasp.py --execute
+python Arm/scan_servo_ids.py --ids 1-6 --baudrate 500000
+python Arm/scan_servo_ids.py --ids 0-20 --baudrate 1000000
 ```
 
-## 视觉检测
-
-任务三主流程使用 `vision_control.py`，类别表来自当前 YOLO 模型：
-
-```python
-0: "A"
-1: "B"
-2: "C"
-3: "D"
-4: "Green"
-6: "Red"
-```
-
-如果要单独验证 YOLO 和深度是否正常，可以运行：
+尝试常见波特率：
 
 ```bash
-python obj_det.py
+python Arm/scan_servo_ids.py --ids 0-20 --try-common-baudrates
 ```
 
-确认能稳定看到：
+目前脚本会依次尝试：
 
-- `Red`
-- `Green`
-- `A/B/C/D`
-- 合理的 `depth_mm`
+```text
+500000, 1000000, 115200, 250000
+```
 
-## 调试建议
+扫描到舵机会输出：
 
-推荐顺序：
+```text
+[FOUND] id=5 pos=2033
+```
 
-1. 先跑 `obj_det.py`，确认 YOLO 类别和深度正常。
-2. 再在 `Arm/` 下跑 `vision_grasp.py --dry-run`，确认机械臂抓取点和 IK 正常。
-3. 再跑 `vision_grasp.py --execute`，确认机械臂能单独抓取。
-4. 再把 `task3.py` 里的 `ARM_DRY_RUN = True`，只空跑机械臂，检查抓取目标和 IK 是否正常。注意机器狗运动控制没有 dry-run，会真实发送 UDP。
-5. 最后设置 `ARM_DRY_RUN = False`，让机械臂和机器狗都实车运行。
+如果整条机械臂都接着扫描，可能会遇到 ID 重复或波特率不同的舵机。为了确认新舵机，最稳的方法是只接新舵机扫描；如果现场不方便单独接，也可以利用不同波特率区分，但写配置时要更小心。
 
-## 注意事项
+## 修改新舵机 ID 和波特率
 
-- `task3.py` 只编排流程，不在里面写底层机械臂或视觉细节。
-- 修改机器狗速度时，优先改 `dog_control.py` 顶部常量。
-- 修改任务流程时间和距离阈值时，改 `task3.py` 顶部常量。
-- 修改机械臂几何、舵机、抓取高度和标定矩阵时，改 `Arm/params.json`。
-- 当前返回取物区采用固定动作：转 180 度后直走 `5s`，不做视觉定位。
+新增脚本：
+
+```text
+Arm/set_servo_id_baud.py
+```
+
+用途：把一个舵机从旧 ID/旧波特率改成项目需要的新 ID/新波特率。
+
+强烈建议只接目标舵机再执行写入操作。如果不能只接目标舵机，至少要确认目标舵机所在波特率下没有其他相同 ID 的舵机，否则可能误写。
+
+先 dry-run，确认计划：
+
+```bash
+cd ~/Desktop/2026Project/task3
+python Arm/set_servo_id_baud.py --old-id 1 --old-baudrate 1000000 --new-id 5 --new-baudrate 500000
+```
+
+确认无误后加 `--yes` 真正写入：
+
+```bash
+python Arm/set_servo_id_baud.py --old-id 1 --old-baudrate 1000000 --new-id 5 --new-baudrate 500000 --yes
+```
+
+写入后必须给舵机断电重启，然后验证：
+
+```bash
+python Arm/scan_servo_ids.py --ids 5 --baudrate 500000
+```
+
+整条机械臂接回后再扫：
+
+```bash
+python Arm/scan_servo_ids.py --ids 1-6 --baudrate 500000
+```
+
+正常应能看到 `1,2,3,4,5,6` 都被 `[FOUND]`。
+
+### 例子：新舵机显示为 1000000/id=1
+
+如果扫描结果类似：
+
+```text
+[Scan] port=/dev/ttyUSB0 baudrate=500000 ids=0..20
+[FOUND] id=1 pos=2225
+[FOUND] id=2 pos=2002
+[FOUND] id=3 pos=2061
+[FOUND] id=4 pos=2070
+[FOUND] id=6 pos=2033
+[Scan] port=/dev/ttyUSB0 baudrate=1000000 ids=0..20
+[FOUND] id=1 pos=3375
+```
+
+这通常表示旧的 `id=1` 在 `500000` 上，新舵机可能是 `id=1`、`baudrate=1000000`。要把它改成肩关节 `id=5`：
+
+```bash
+python Arm/set_servo_id_baud.py --old-id 1 --old-baudrate 1000000 --new-id 5 --new-baudrate 500000 --yes
+```
+
+如果不能只接新舵机，这个操作大概率只会影响 `1000000/id=1` 的舵机，因为旧 `500000/id=1` 听不懂 1000000 波特率下的命令。但这不是零风险，执行前务必确认没有其他 `1000000/id=1` 的舵机。
+
+## 抓取后的抬升逻辑
+
+`ArmControl.compute_pick_plan()` 会计算完整抓取路径：
+
+1. 抓取前预抬升 `pre_grasp_lift_mm`
+2. 抓取点
+3. 抓取后抬升 `post_grasp_lift_mm`
+
+配置位置：
+
+```json
+"pre_grasp_lift_mm": 40.0,
+"post_grasp_lift_mm": 100.0
+```
+
+以前抬升时保持同一个 `x/y`，如果目标已经比较远，直接竖直抬高可能导致 IK 超出可达范围，例如：
+
+```text
+Target wrist point is unreachable ... distance=307.0, reach=[5.0, 295.0]
+```
+
+现在新增了 `solve_lift_target()`：先尝试原地抬升；如果不可达，就沿当前 yaw 方向往回缩，每 5mm 重新求一次 IK。这样允许“上抬 + 回缩”，只要抓取可达，抬升阶段就会尽量找一个安全可达姿态。
+
+运行时如果发生回缩，会看到类似：
+
+```text
+[IK] post_lift retracted r 415.1->390.1mm at z=265.0mm
+```
+
+这表示抓取后抬升高度保持目标值，但水平距离从 415.1mm 回缩到 390.1mm。
+
+## 放置姿态
+
+`place_block()` 现在不再只是把底座舵机回中后开爪，而是先计算一个正前方放置姿态：
+
+```text
+ArmControl.compute_place_pose()
+```
+
+放置目标：
+
+- `yaw = 0`，机械臂正向前方
+- 高度为桌面上方约 10cm
+- 在该高度下尽量伸长
+- 到位后再打开夹爪
+
+配置位置：
+
+```json
+"place_height_above_table_mm": 100.0
+```
+
+桌面高度来自：
+
+```json
+"table_z_base_mm": 120.0
+```
+
+所以默认放置高度为：
+
+```text
+z = 120.0 + 100.0 = 220.0mm
+```
+
+如果现场发现放置太高或太低，优先调整 `Arm/params.json` 里的：
+
+```json
+"place_height_above_table_mm": 100.0
+```
+
+例如改为 `80.0` 表示桌面上方 8cm。
+
+## 验证建议
+
+修改舵机配置后：
+
+```bash
+python Arm/scan_servo_ids.py --ids 1-6 --baudrate 500000
+```
+
+运行任务前可以监控舵机：
+
+```bash
+python Arm/monitor_servos.py --ids 1 2 3 4 5 6 --single-line
+```
+
+如果某个 ID 仍然报错，先确认：
+
+- 舵机是否供电
+- 三线是否插牢、线序是否正确
+- ID 是否正确
+- 波特率是否为 `500000`
+- 是否存在重复 ID
+- 是否是同协议的 ST3215/SCServo 舵机
