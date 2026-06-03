@@ -184,6 +184,7 @@ def _run_single_dashboard_with_detector(
             letter_state = "ALIGN"
             letter_align_adjust_count = 0
             letter_distance_adjust_count = 0
+            robot.move(last_time=0.10, vx=-7000)
             time.sleep(0.2)
             continue
 
@@ -193,7 +194,7 @@ def _run_single_dashboard_with_detector(
 
         if letter_state == "ALIGN":
             if letter_x_center < letter_x_center_min:
-                robot.move(last_time=0.12, vy=-15000)
+                robot.move(last_time=0.12, vy=-18000)
                 time.sleep(0.5)
                 robot.move(last_time=0.01, vx=7000)
                 letter_align_adjust_count += 1
@@ -268,9 +269,9 @@ def _run_single_dashboard_with_detector(
     # ----------------------------
     # 四、普通if：只做ssi可见性检查
     # ----------------------------
-    time.sleep(1.2)
+    time.sleep(1.8)
     robot.UPDOWN()
-    time.sleep(0.8)
+    time.sleep(2)
     ssi_check_retry_count = 0
     while True:
         infer_output = detector.infer_once()
@@ -324,12 +325,11 @@ def _run_single_dashboard_with_detector(
     return record
 
 
-def task2_new(robot, show_stream=False):
+def task2_new(robot, detector, show_stream=False):
     """
     识别四个仪表盘，返回四条记录。
     """
     records = []
-    detector = SimpleInfer(show_stream=show_stream)
 
     try:
         # ============================
@@ -378,8 +378,8 @@ def task2_new(robot, show_stream=False):
         time.sleep(0.5)
         robot.revolve_90_l()
         time.sleep(0.5)
-        robot.move(last_time=0.36, vz=10000) #定
-        time.sleep(0.5)
+        robot.move(last_time=0.38, vz=10000) #定
+        time.sleep(0.8)
         robot.move(last_time =5.5, vx=20000)   #定
         time.sleep(0.5)
         robot.revolve_90_r()
@@ -420,15 +420,15 @@ def task2_new(robot, show_stream=False):
         time.sleep(0.5)
         robot.revolve_90_l()
         time.sleep(0.5)
-        robot.move(last_time=0.25, vz=10000)
-        time.sleep(0.5)
-        robot.move(last_time=1.7, vx=15000)
+        robot.move(last_time=2, vx=15000)
         time.sleep(0.5)
         robot.revolve_90_l()
         time.sleep(0.5)
-        robot.move(last_time=4.8, vx=-15000)
+        robot.move(last_time=0.2, vz=10000)
         time.sleep(0.5)
-        robot.move(last_time=5.8, vy=-20000)
+        robot.move(last_time=4, vx=-15000)
+        time.sleep(0.5)
+        robot.move(last_time=6, vy=-20000)
         time.sleep(0.5)
 
         # ----------------------------
@@ -466,9 +466,7 @@ def task2_new(robot, show_stream=False):
         time.sleep(0.5)
         robot.revolve_90_l()
         time.sleep(0.5)
-        robot.move(last_time=0.2, vz=10000)
-        time.sleep(0.5)
-        robot.move(last_time=5.5, vx=20000)
+        robot.move(last_time=6, vx=20000)
         time.sleep(0.5)
         robot.revolve_90_r()
         time.sleep(0.5)
@@ -503,9 +501,10 @@ def task2_new(robot, show_stream=False):
             summary_list.append([rec["dashboard_index"], rec["letter"], rec["dashboard_state"]])
         print("四个仪表盘汇总列表：{}".format(summary_list))
         print("task2_new finished")
+        robot.UPDOWN()
+        time.sleep(0.5)
 
     finally:
-        detector.close()
-        print("detector.close() done")
+        pass
 
     return records
