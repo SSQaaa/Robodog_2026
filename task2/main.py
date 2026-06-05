@@ -25,7 +25,7 @@ if __name__ == "__main__":
     task2_new(robot, detector=detector, show_stream=args.stream)
 
     # ------------------------------------任务二和任务三的衔接--------------------
-    robot.move(last_time=8, vy=20000)
+    robot.move(last_time=6, vy=25000)
     time.sleep(0.5)
     robot.move(last_time=2.5, vx=-20000)
     time.sleep(0.5)

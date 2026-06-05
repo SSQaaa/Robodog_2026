@@ -25,6 +25,78 @@ def _box_center_x(det):
     return (float(x1) + float(x2)) / 2.0
 
 
+def _adjust_c_distance(robot, detector, target_m, tolerance_m, stable_need_frames, max_adjust_steps):
+    """只根据C的深度距离前后移动，不再做左右和角度调整。"""
+    stable_count = 0
+
+    for step in range(max_adjust_steps):
+        infer_output = detector.infer_once()
+        detections = infer_output.get("detections", [])
+        det_c = _pick_best_by_class(detections, 2)
+
+        if det_c is None:
+            print("BRIDGE_DISTANCE: step={} 未检测到C，继续等待".format(step + 1))
+            stable_count = 0
+            time.sleep(0.3)
+            continue
+
+        distance_m = det_c.get("distance_m", None)
+        if distance_m is None:
+            print("BRIDGE_DISTANCE: step={} C深度无效，继续等待".format(step + 1))
+            stable_count = 0
+            time.sleep(0.3)
+            continue
+
+        distance_m = float(distance_m)
+        error_m = target_m - distance_m
+
+        if abs(error_m) <= tolerance_m:
+            stable_count += 1
+            print(
+                "BRIDGE_DISTANCE: step={} 通过帧 {}/{} 当前={:.3f}m 目标={:.3f}m 误差={:.3f}m".format(
+                    step + 1,
+                    stable_count,
+                    stable_need_frames,
+                    distance_m,
+                    target_m,
+                    error_m,
+                )
+            )
+            if stable_count >= stable_need_frames:
+                print("BRIDGE_DISTANCE: 距离调整完成")
+                return distance_m
+            time.sleep(0.2)
+            continue
+
+        stable_count = 0
+
+        if abs(error_m) > 0.50:
+            vx_abs = 15000
+        else:
+            vx_abs = 10000
+
+        # error_m = target - current；远了前进，近了后退。
+        if error_m < 0:
+            vx_cmd = vx_abs
+        else:
+            vx_cmd = -vx_abs
+
+        print(
+            "BRIDGE_DISTANCE: step={} 当前={:.3f}m 目标={:.3f}m 误差={:.3f}m vx={}".format(
+                step + 1,
+                distance_m,
+                target_m,
+                error_m,
+                vx_cmd,
+            )
+        )
+        robot.move(last_time=0.12, vx=vx_cmd)
+        time.sleep(0.4)
+
+    print("BRIDGE_DISTANCE: 达到最大调整次数，按当前距离继续")
+    return None
+
+
 def _normalize_yaw_error(target_yaw, current_yaw):
     """把角度误差限制在 -180 到 180 之间，避免正负180跳变。"""
     error = float(target_yaw) - float(current_yaw)
@@ -74,13 +146,12 @@ def read_current_yaw_deg(sample_count=3):
     return _average_yaw_deg(yaw_list)
 
 
-def rotate_to_relative_yaw(robot, target_yaw_deg, tolerance_deg=2.0):
+def rotate_to_relative_yaw(robot, target_yaw_deg, tolerance_deg=5.0):
     """
     转到相对于开机初始0度的目标角度。
-    target_yaw_deg例如：逆时针90度填写90，顺时针90度填写-90。
     """
     stable_need_frames = 3
-    max_adjust_steps = 40
+    max_adjust_steps = 40   #最大的调整次数，超过这个次数就认为调整失败
     yaw_vz_small = 10000
     yaw_vz_large = 12000
     stable_count = 0
@@ -129,8 +200,8 @@ def rotate_to_relative_yaw(robot, target_yaw_deg, tolerance_deg=2.0):
                 vz_cmd,
             )
         )
-        robot.move(last_time=0.06, vz=vz_cmd)
-        time.sleep(0.8)
+        robot.move(last_time=0.01, vz=vz_cmd)
+        time.sleep(0.15)
 
     print("YAW: 达到最大调整次数，按当前角度继续")
     return read_current_yaw_deg()
@@ -144,10 +215,13 @@ def task2_3(robot, detector):
     """
     c_x_center_min = 350
     c_x_center_max = 400
-    target_yaw_deg = -90.0
+    c_distance_target_m = 1.50
+    c_distance_tolerance_m = 0.20
+    target_yaw_deg = 168.0  #非常重要的一个参数，需要根据实际情况调整。这个角度是相对于开机初始0度的，也就是说如果开机时机器人朝向不正，那么这个目标角度也要相应调整。
 
     stable_need_frames = 3
     max_adjust_steps = 30
+    max_distance_adjust_steps = 30
 
     stable_count = 0
 
@@ -163,24 +237,24 @@ def task2_3(robot, detector):
 
         if det_c is None:
             print("BRIDGE: step={} 未检测到C，直走搜索".format(step + 1))
-            robot.move(last_time=0.08, vx=10000)
+            robot.move(last_time=0.2, vx=10000)
             stable_count = 0
-            time.sleep(1)
+            time.sleep(0.5)
             continue
 
         c_x = _box_center_x(det_c)
         if c_x < c_x_center_min:
             print("BRIDGE: step={} C偏左 x={:.1f}，左移微调".format(step + 1, c_x))
-            robot.move(last_time=0.10, vy=-15000)
+            robot.move(last_time=0.10, vy=-20000)
             stable_count = 0
-            time.sleep(0.5)
+            time.sleep(0.25)
             continue
 
         if c_x > c_x_center_max:
             print("BRIDGE: step={} C偏右 x={:.1f}，右移微调".format(step + 1, c_x))
-            robot.move(last_time=0.10, vy=15000)
+            robot.move(last_time=0.10, vy=20000)
             stable_count = 0
-            time.sleep(0.5)
+            time.sleep(0.25)
             continue
 
         stable_count += 1
@@ -194,10 +268,34 @@ def task2_3(robot, detector):
         )
 
         if stable_count >= stable_need_frames:
-            print("BRIDGE: 左右调整完成，进入任务三")
+            print("BRIDGE: 左右调整完成，开始调整C距离")
+            final_distance = _adjust_c_distance(
+                robot,
+                detector,
+                c_distance_target_m,
+                c_distance_tolerance_m,
+                stable_need_frames,
+                max_distance_adjust_steps,
+            )
+            if final_distance is not None:
+                print("BRIDGE: C距离调整完成，当前距离={:.3f}m，进入任务三".format(final_distance))
+            else:
+                print("BRIDGE: C距离调整结束，进入任务三")
             break
 
         time.sleep(0.3)
 
     else:
-        print("BRIDGE: C居中达到最大调整次数，按当前位置进入任务三")
+        print("BRIDGE: C居中达到最大调整次数，按当前位置开始调整C距离")
+        final_distance = _adjust_c_distance(
+            robot,
+            detector,
+            c_distance_target_m,
+            c_distance_tolerance_m,
+            stable_need_frames,
+            max_distance_adjust_steps,
+        )
+        if final_distance is not None:
+            print("BRIDGE: C距离调整完成，当前距离={:.3f}m，进入任务三".format(final_distance))
+        else:
+            print("BRIDGE: C距离调整结束，进入任务三")

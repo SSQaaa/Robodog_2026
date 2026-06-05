@@ -289,7 +289,7 @@ def _run_single_dashboard_with_detector(
             time.sleep(0.7)
             break
 
-        robot.move(last_time=0.10, vx=-7000)
+        robot.move(last_time=0.02, vx=-7000)
         ssi_check_retry_count += 1
         print("D{} SSI_CHECK: 未检测到ssi，后退微调，次数={}".format(dashboard_index, ssi_check_retry_count))
         time.sleep(0.25)
@@ -420,15 +420,15 @@ def task2_new(robot, detector, show_stream=False):
         time.sleep(0.5)
         robot.revolve_90_l()
         time.sleep(0.5)
-        robot.move(last_time=2, vx=15000)
+        robot.move(last_time=0.23, vz=10000)
+        time.sleep(0.5)
+        robot.move(last_time=2.1, vx=15000)
         time.sleep(0.5)
         robot.revolve_90_l()
         time.sleep(0.5)
-        robot.move(last_time=0.2, vz=10000)
+        robot.move(last_time=4.5, vx=-15000)
         time.sleep(0.5)
-        robot.move(last_time=4, vx=-15000)
-        time.sleep(0.5)
-        robot.move(last_time=6, vy=-20000)
+        robot.move(last_time=4, vy=-25000)
         time.sleep(0.5)
 
         # ----------------------------
