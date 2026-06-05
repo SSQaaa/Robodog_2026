@@ -84,7 +84,7 @@ def _wait_single_dashboard(detector, robot):
         time.sleep(0.2)
 
 
-def _read_state_normal_loop(detector, need_frames=3, max_frames=40):
+def _read_state_normal_loop(detector, need_frames=3, max_frames=40, interval_s=0.5):
     """普通循环：稳定读取仪表盘状态。"""
     last_state = None
     same_count = 0
@@ -120,6 +120,8 @@ def _read_state_normal_loop(detector, need_frames=3, max_frames=40):
         if frame_count >= max_frames:
             print("READ_STATE: 超时，返回未知")
             return "未知"
+
+        time.sleep(interval_s)
 
 
 def _read_letter_normal_loop(detector, need_frames=3, max_frames=40):
@@ -286,7 +288,7 @@ def _run_single_dashboard_with_detector(
         has_ssi = _has_ssi_detection(infer_output)
         if has_ssi:
             print("D{} SSI_CHECK: 已检测到ssi，进入读取仪表盘状态步骤".format(dashboard_index))
-            time.sleep(0.7)
+            time.sleep(1.0)
             break
 
         robot.move(last_time=0.02, vx=-7000)
@@ -388,8 +390,8 @@ def task2_new(robot, detector, show_stream=False):
         # ----------------------------
         # 第2个仪表盘阈值
         # ----------------------------
-        second_letter_x_center_min = 290
-        second_letter_x_center_max = 320
+        second_letter_x_center_min = 310
+        second_letter_x_center_max = 340
         second_letter_distance_target_m = 0.35
         second_letter_distance_tolerance_m = 0.05
         second_max_letter_align_adjust_count = 5
