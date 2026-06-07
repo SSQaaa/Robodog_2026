@@ -27,25 +27,24 @@ STATUS_TO_BLOCK = {
     "NORMAL": "Green",
 }
 
-CENTER_TOLERANCE_BLOCK_PX = 100
-PRE_GRASP_MOVE_SECONDS_X = 0.1
-PRE_GRASP_MOVE_SECONDS_Y = 0.3
-PRE_GRASP_MAX_ADJUST_SECONDS = 60.0
-GRASP_R_LIMIT_MM = 430.0
-GRASP_MAX_RETRY = 5
+CENTER_TOLERANCE_BLOCK_PX = 100  # 中心值+-100就认为绿/红色物块在画面中心，主要是因为离得比较近
+PRE_GRASP_MOVE_SECONDS_X = 0.1   # 抓物块时候狗往前/后移动的时间，调整物块距离
+PRE_GRASP_MOVE_SECONDS_Y = 0.3   # 抓物块时候狗往左/右移动的时间，调整物块在画面中的位置
+PRE_GRASP_MAX_ADJUST_SECONDS = 30.0  # 抓取前最大调整时间，超过这个时间就放弃抓取，重新开始流程。因为如果调整时间过长可能是识别有问题或者位置太偏了，继续调整可能也很难成功。
+GRASP_R_LIMIT_MM = 395.0
 GRASP2_MISSING_RECENTER_COUNT = 5
 
 FORWARD_SECONDS = 2.0
-CENTER_TOLERANCE_BOX_PX = 30
-MAX_ALIGN_SECONDS = 150.0
-FINAL_BOX_FORWARD_SECONDS = 2.0
-BOX_LOST_NEAR_DEPTH_MM = 80.0
+CENTER_TOLERANCE_BOX_PX = 20  # 中心值+-20px就认为ABCD在画面中心
+MAX_ALIGN_SECONDS = 60.0
+BOX_LOST_NEAR_DEPTH_MM = 300.0
+BOX_SEENED_DEPTH_MM = 1000.0
 
 A_BACK_MOVE_SECONDS = 6.0
 
-RETURN_FORWARD_SECONDS = 5.0
+RETURN_FORWARD_SECONDS = 4.5
 
-SIDE_MOVE_SECONDS = 1.7
+SIDE_MOVE_SECONDS = 1.0
 
 
 class Task3Mission:
@@ -93,14 +92,15 @@ class Task3Mission:
         self.arm.place_block()
         time.sleep(0.5)
 
+        if letter == 'D':
+            return
+
         self.dog.revolve_180()
         time.sleep(0.5)
         if letter == 'A':
             self.dog.move(vy=-SIDE_SPEED, last_time=A_BACK_MOVE_SECONDS, duration=0.3)
         if letter == 'B':
             self.dog.move(vy=-SIDE_SPEED, last_time=A_BACK_MOVE_SECONDS-3.0, duration=0.3)
-        if letter == 'D':
-            return
 
         self.dog.move(vx=FORWARD_SPEED, last_time=RETURN_FORWARD_SECONDS, duration=0.3)
         time.sleep(0.5)
@@ -114,8 +114,9 @@ class Task3Mission:
     
     # 抓取物块，抓取失败时重新校准并重新计算视觉坐标。
     def grasp(self, block_class):
-        for attempt in range(1, GRASP_MAX_RETRY + 1):
-            print(f"[PickRetry] attempt {attempt}/{GRASP_MAX_RETRY}")
+        attempt = 1
+        while True:
+            print(f"[PickRetry] attempt {attempt}")
             try:
                 self.adjust_before_grasp_1(block_class)
                 time.sleep(0.5)
@@ -125,11 +126,10 @@ class Task3Mission:
                 picked = False
                 print(f"[PickRetry] adjust/pick failed with exception: {exc}")
             if picked:
-                break
+                return
             print("[PickRetry] grasp failed, adjust and try again")
+            attempt += 1
             time.sleep(0.5)
-        else:
-            raise RuntimeError(f"Failed to grasp {block_class} after {GRASP_MAX_RETRY} attempts")
         
     # 先让目标字母进入画面中心，再固定直走到箱子前。
     def adjust_before_grasp_1(self, block_class):
@@ -295,14 +295,6 @@ class Task3Mission:
 
             # 如果没找到并且给上一次的距离是80cm以内，就直接认为找到了
             if not matches:
-                if last_depth_mm is not None and last_depth_mm < BOX_LOST_NEAR_DEPTH_MM:
-                    print(
-                        f"[Box] {letter} lost at near depth={last_depth_mm:.1f}mm, "
-                        "treat as reached"
-                    )
-                    self.dog.stop()
-                    return
-
                 target_none_count += 1
                 if target_none_count < 3:
                     print(f"[Box] {letter} not found attempt {target_none_count}/3")
@@ -310,10 +302,18 @@ class Task3Mission:
                     continue
                 
                 # 连续三次没找到，就站定再识别，防止因为抖动导致的识别失败  
+                if last_depth_mm is not None and last_depth_mm < BOX_SEENED_DEPTH_MM:
+                    print(
+                        f"[Box] {letter} lost for 3 frames after near depth={last_depth_mm:.1f}mm, "
+                        "treat as reached"
+                    )
+                    self.dog.stop()
+                    return
+
                 print(f"[Box] {letter} not found after 3 attempts")
                 target_none_count = 0
                 self.dog.stop()
-                time.sleep(1.5)
+                time.sleep(0.5)
                 frame, detections = self.vision.detect()
                 if frame is None:
                     continue
@@ -325,6 +325,7 @@ class Task3Mission:
                 else:
                     print(f"[Box] {letter} not found")
                     self.dog.move(vx=BACKWARD_SPEED, last_time=0.3, duration=0.3)
+                    print(f"[Box] {letter} can't be found, move backward a little")
                     time.sleep(0.5)
                     continue
             
@@ -343,16 +344,23 @@ class Task3Mission:
                 depth_none_count += 1
                 print(f"[Box] {letter} depth invalid")
                 time.sleep(0.1)
-                if(depth_none_count >= 3):
-                    print(f"[Box] {letter} depth invalid count={depth_none_count}, stopped")
+                if (
+                    depth_none_count >= 3
+                    and last_depth_mm is not None
+                    and last_depth_mm < BOX_SEENED_DEPTH_MM
+                ):
+                    print(
+                        f"[Box] {letter} depth invalid count={depth_none_count} "
+                        f"after near depth={last_depth_mm:.1f}mm, stopped"
+                    )
                     self.dog.stop()
                     return
                 continue
             
-            # 如果距离大于80cm，就往前走一点
+            # 如果距离大于30cm，就往前走一点
             if target.depth_mm >= BOX_LOST_NEAR_DEPTH_MM:
                 depth_none_count = 0
-                self.dog.move(vx=APPROACH_BOX_SPEED, last_time=0.2, duration=0.5)
+                self.dog.move(vx=APPROACH_BOX_SPEED, last_time=0.3, duration=0.3)
                 print(f"[Box] {letter} depth={target.depth_mm:.1f}mm, move forward a little more")
                 continue
 

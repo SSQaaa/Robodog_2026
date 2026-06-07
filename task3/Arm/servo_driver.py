@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from config import all_servo_ids, clamp, servo_cfg
 from scservo_sdk import COMM_SUCCESS, PortHandler, sms_sts
 from scservo_sdk.sms_sts import (
+    SMS_STS_MOVING,
     SMS_STS_PRESENT_CURRENT_L,
     SMS_STS_PRESENT_TEMPERATURE,
     SMS_STS_PRESENT_VOLTAGE,
@@ -71,11 +72,49 @@ class ServoBus:
             print(self.packet.getRxPacketError(error))
         return result, error
 
+    def read_moving(self, servo_id):
+        moving, result, error = self.packet.read1ByteTxRx(int(servo_id), SMS_STS_MOVING)
+        if result != COMM_SUCCESS or error:
+            print(f"[ServoBus] moving read id={servo_id} result={result} error={error}")
+            return None
+        return int(moving)
+
+    def wait_until_stopped(self, servo_ids, timeout_s=None, interval_s=0.05):
+        servo_ids = [int(servo_id) for servo_id in servo_ids]
+        timeout_s = float(self.cfg.get("move_timeout_s", 8.0) if timeout_s is None else timeout_s)
+        stable_required = int(self.cfg.get("move_stable_samples", 2))
+        deadline = time.time() + timeout_s
+        stable_count = 0
+
+        while time.time() < deadline:
+            moving_values = []
+            for servo_id in servo_ids:
+                moving = self.read_moving(servo_id)
+                if moving is None:
+                    moving = 1
+                moving_values.append(moving)
+
+            if all(value == 0 for value in moving_values):
+                stable_count += 1
+                if stable_count >= stable_required:
+                    print(f"[ServoBus] stopped ids={servo_ids}")
+                    return True
+            else:
+                stable_count = 0
+            time.sleep(float(interval_s))
+
+        print(f"[ServoBus] wait stopped timeout ids={servo_ids}")
+        return False
+
     def move_targets(self, targets, wait_s=1.0, read_after=True):
         for servo_id, position in targets.items():
             self.write_pos(int(servo_id), int(position))
             time.sleep(0.04)
-        time.sleep(float(wait_s))
+        timeout_s = max(float(wait_s), float(self.cfg.get("move_timeout_s", 8.0)))
+        self.wait_until_stopped(targets.keys(), timeout_s=timeout_s)
+        settle_s = float(self.cfg.get("settle_after_move_s", 0.2))
+        if settle_s > 0:
+            time.sleep(settle_s)
         if read_after:
             self.print_status(sorted(int(sid) for sid in targets.keys()))
 

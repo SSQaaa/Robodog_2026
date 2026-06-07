@@ -3,7 +3,6 @@ import os
 import sys
 import time
 import ctypes
-from collections import defaultdict, deque
 
 import cv2
 import numpy as np
@@ -31,7 +30,6 @@ import yolov5_trt_cpp
 
 CONF_THRESH = 0.4
 MIN_VALID_DEPTH_COUNT = 20
-DEPTH_HISTORY_LEN = 5
 
 WINDOW_NAME = "GeminiPro YOLO Depth"
 
@@ -52,18 +50,6 @@ CLASS_NAMES = {
 # =========================
 # 工具类
 # =========================
-
-class DepthSmoother:
-    def __init__(self, max_len=5):
-        self.history = defaultdict(lambda: deque(maxlen=max_len))
-
-    def update(self, obj_id, depth_mm):
-        if depth_mm <= 0:
-            return None
-
-        self.history[obj_id].append(depth_mm)
-        return int(np.median(np.array(self.history[obj_id])))
-
 
 def scale_box(box, src_size, dst_size):
     x1, y1, x2, y2 = box
@@ -199,8 +185,6 @@ def main():
     print(f"[Orbbec] color intrinsics: {color_intrinsics}")
     print(f"[Orbbec] depth intrinsics : {depth_intrinsics}")
 
-    smoother = DepthSmoother(max_len=DEPTH_HISTORY_LEN)
-
     frame_id = 0
 
     try:
@@ -244,28 +228,27 @@ def main():
                 raw_depth, valid_count = cam.get_depth_in_box(*depth_box)
 
                 if raw_depth > 0 and valid_count >= MIN_VALID_DEPTH_COUNT:
-                    obj_key = int(cls_id)
-                    stable_depth = smoother.update(obj_key, raw_depth)
+                    current_depth = int(raw_depth)
                     x1, y1, x2, y2 = color_box
                     target_u = (x1 + x2) * 0.5
                     target_v = (y1 + y2) * 0.5
                     cam_x, cam_y, cam_z = pixel_to_camera(
                         target_u,
                         target_v,
-                        stable_depth,
+                        current_depth,
                         color_intrinsics,
                     )
 
                     print(
                         f"[Target] cls={int(cls_id)}, conf={conf:.2f}, "
-                        f"raw={raw_depth} mm, stable={stable_depth} mm, "
+                        f"depth={current_depth} mm, "
                         f"valid={valid_count}, "
                         f"center=({target_u:.1f},{target_v:.1f}), "
                         f"cam_xyz=({cam_x:.1f},{cam_y:.1f},{cam_z:.1f}) mm, "
                         f"color_box={color_box}, depth_box={depth_box}"
                     )
                 else:
-                    stable_depth = None
+                    current_depth = None
 
                     print(
                         f"[Target] cls={int(cls_id)}, conf={conf:.2f}, "
@@ -278,7 +261,7 @@ def main():
                     color_box,
                     cls_id,
                     conf,
-                    stable_depth,
+                    current_depth,
                     valid_count,
                 )
 

@@ -67,7 +67,7 @@
     "table_z_base_mm": 120.0,
     "grasp_z_offset_mm": 0.0,
     "grasp_offset_base_mm": [
-      0.0,
+      20.0,
       -15.0,
       0.0
     ],
@@ -91,6 +91,10 @@
     "baudrate": 500000,
     "moving_speed": 600,
     "moving_acc": 10,
+    "move_timeout_s": 8.0,
+    "move_stable_samples": 2,
+    "settle_after_move_s": 0.2,
+    "grasp_settle_s": 0.3,
     "ids": {
       "gripper": 1,
       "gripper_rotate": 2,
@@ -165,12 +169,12 @@
       "max_close_s": 2.0
     },
     "reset_pose": {
-      "1": 1900,
-      "2": 2047,
-      "3": 2047,
-      "4": 2060,
-      "5": 3375,
-      "6": 2047
+      "1": 2193,
+      "2": 2043,
+      "3": 1902,
+      "4": 3370,
+      "5": 3362,
+      "6": 2092
     }
   }
 }

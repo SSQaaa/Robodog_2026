@@ -5,7 +5,6 @@ import ctypes
 import os
 import sys
 import time
-from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Optional
 
@@ -18,7 +17,6 @@ ENGINE_PATH = os.path.join(TRT_LIB_DIR, "bigdog_0427.engine")
 
 CONF_THRESH = 0.4
 MIN_VALID_DEPTH_COUNT = 20
-DEPTH_HISTORY_LEN = 5
 
 CLASS_NAMES = {
     0: "A",
@@ -47,18 +45,6 @@ class Detection:
     def area(self):
         x1, y1, x2, y2 = self.box
         return abs(x2 - x1) * abs(y2 - y1)
-
-
-class DepthSmoother:
-    def __init__(self, max_len=DEPTH_HISTORY_LEN):
-        self.history = defaultdict(lambda: deque(maxlen=max_len))
-
-    # 对同一类别的深度做短时间中值滤波，减少单帧跳变。
-    def update(self, key, depth_mm):
-        if depth_mm <= 0:
-            return None
-        self.history[key].append(int(depth_mm))
-        return int(np.median(np.asarray(self.history[key], dtype=np.int32)))
 
 
 def scale_box(box, src_size, dst_size):
@@ -110,7 +96,6 @@ class YoloDepthDetector:
         self.detector = None
         self.camera = None
         self.color_intrinsics = None
-        self.smoother = DepthSmoother()
 
     # 加载 TensorRT 引擎并启动 Orbbec 相机。
     def start(self):
@@ -166,9 +151,9 @@ class YoloDepthDetector:
             color_box = yolo_to_original((cx, cy, w, h), img_w=color_w, img_h=color_h)
             depth_box = scale_box(color_box, src_size=(color_w, color_h), dst_size=(depth_w, depth_h))
             depth_mm, valid_count = self.camera.get_depth_in_box(*depth_box)
-            stable_depth = None
+            current_depth = None
             if depth_mm > 0 and valid_count >= MIN_VALID_DEPTH_COUNT:
-                stable_depth = self.smoother.update(class_name, depth_mm)
+                current_depth = int(depth_mm)
 
             x1, y1, x2, y2 = color_box
             detections.append(
@@ -177,10 +162,9 @@ class YoloDepthDetector:
                     conf=float(conf),
                     box=color_box,
                     center=((x1 + x2) * 0.5, (y1 + y2) * 0.5),
-                    depth_mm=stable_depth,
+                    depth_mm=current_depth,
                     valid_count=int(valid_count),
                 )
             )
 
         return frame, detections
-

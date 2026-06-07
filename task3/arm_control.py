@@ -80,6 +80,7 @@ class ArmControl:
         self.bus.open_gripper()
         self.bus.move_targets(pre_solution.servo_targets, wait_s=1.5)
         self.bus.move_targets(result["solution"].servo_targets, wait_s=1.5)
+        time.sleep(float(self.arm_cfg.get("grasp_settle_s", 0.3)))
         self.bus.close_gripper_protected()
         self.bus.move_targets(post_solution.servo_targets, wait_s=1.5)
 
