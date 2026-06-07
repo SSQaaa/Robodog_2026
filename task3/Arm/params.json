@@ -105,7 +105,7 @@
       "L3": 80.0
     },
     "shoulder_height_mm": 20.0,
-    "gripper_offset_mm": 160.0,
+    "gripper_offset_mm": 130.0,
     "pre_grasp_lift_mm": 40.0,
     "post_grasp_lift_mm": 100.0,
     "place_height_above_table_mm": 150.0,
