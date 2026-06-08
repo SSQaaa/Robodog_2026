@@ -16,7 +16,7 @@
 import time
 
 from tasks.dashboard_letter_detector import SimpleInfer, analyze_infer_output
-
+# from tasks.task2_3 import rotate_to_relative_yaw
 
 def _calc_center_x_from_vertices(vertices):
     """根据四顶点计算中心x。"""
@@ -380,6 +380,9 @@ def task2_new(robot, detector, show_stream=False):
         time.sleep(0.5)
         robot.revolve_90_l()
         time.sleep(0.5)
+        # print("BRIDGE: 开始IMU角度调整")
+        # final_yaw = rotate_to_relative_yaw(robot, -174.0)
+        # print("BRIDGE: IMU角度调整完成，当前yaw={:.3f}".format(final_yaw))
         robot.move(last_time=0.38, vz=10000) #定
         time.sleep(0.8)
         robot.move(last_time =5.5, vx=20000)   #定
@@ -428,7 +431,7 @@ def task2_new(robot, detector, show_stream=False):
         time.sleep(0.5)
         robot.revolve_90_l()
         time.sleep(0.5)
-        robot.move(last_time=4.5, vx=-15000)
+        robot.move(last_time=4.2, vx=-15000)
         time.sleep(0.5)
         robot.move(last_time=4, vy=-25000)
         time.sleep(0.5)

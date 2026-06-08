@@ -146,14 +146,14 @@ def read_current_yaw_deg(sample_count=3):
     return _average_yaw_deg(yaw_list)
 
 
-def rotate_to_relative_yaw(robot, target_yaw_deg, tolerance_deg=5.0):
+def rotate_to_relative_yaw(robot, target_yaw_deg, tolerance_deg=3.0):
     """
     转到相对于开机初始0度的目标角度。
     """
     stable_need_frames = 3
     max_adjust_steps = 40   #最大的调整次数，超过这个次数就认为调整失败
-    yaw_vz_small = 10000
-    yaw_vz_large = 12000
+    yaw_vz_small = 9600
+    yaw_vz_large = 10000
     stable_count = 0
 
     for step in range(max_adjust_steps):
@@ -200,7 +200,7 @@ def rotate_to_relative_yaw(robot, target_yaw_deg, tolerance_deg=5.0):
                 vz_cmd,
             )
         )
-        robot.move(last_time=0.01, vz=vz_cmd)
+        robot.move(last_time=0.005, vz=vz_cmd)
         time.sleep(0.15)
 
     print("YAW: 达到最大调整次数，按当前角度继续")
@@ -217,7 +217,7 @@ def task2_3(robot, detector):
     c_x_center_max = 400
     c_distance_target_m = 1.50
     c_distance_tolerance_m = 0.20
-    target_yaw_deg = 168.0  #非常重要的一个参数，需要根据实际情况调整。这个角度是相对于开机初始0度的，也就是说如果开机时机器人朝向不正，那么这个目标角度也要相应调整。
+    target_yaw_deg = 2.0  #非常重要的一个参数，需要根据实际情况调整。这个角度是相对于开机初始0度的，也就是说如果开机时机器人朝向不正，那么这个目标角度也要相应调整。
 
     stable_need_frames = 3
     max_adjust_steps = 30
