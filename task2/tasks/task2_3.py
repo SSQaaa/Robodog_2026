@@ -217,7 +217,7 @@ def task2_3(robot, detector):
     c_x_center_max = 400
     c_distance_target_m = 1.50
     c_distance_tolerance_m = 0.20
-    target_yaw_deg = 2.0  #非常重要的一个参数，需要根据实际情况调整。这个角度是相对于开机初始0度的，也就是说如果开机时机器人朝向不正，那么这个目标角度也要相应调整。
+    target_yaw_deg = 0  #非常重要的一个参数，需要根据实际情况调整。这个角度是相对于开机初始0度的，也就是说如果开机时机器人朝向不正，那么这个目标角度也要相应调整。
 
     stable_need_frames = 3
     max_adjust_steps = 30

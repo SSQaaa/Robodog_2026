@@ -36,7 +36,7 @@ if __name__ == "__main__":
 
     robot.revolve_180()
     time.sleep(0.5)
-    robot.move(last_time=1.3, vx=20000)
+    robot.move(last_time=1.5, vx=20000)
 
 
     detector.close()    # 关闭摄像头

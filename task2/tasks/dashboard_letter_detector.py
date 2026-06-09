@@ -69,6 +69,9 @@ SSI_ID = 9
 CONF_THRESH = 0.25
 MIN_VALID_DEPTH_COUNT = 20
 POINTER_THRESHOLD = 118
+POINTER_MASK_CUT_WIDTH_DEG = 60
+POINTER_RAY_MIN_R = 11
+POINTER_RAY_MAX_R = 85
 NORMAL_ANGLE_MIN = 120.0
 NORMAL_ANGLE_MAX = 180.0
 
@@ -160,8 +163,36 @@ def refine_box(box, frame_w, frame_h, ratio=0.5):
     return [int(x1), int(y1), int(x2), int(y2)]
 
 
+def make_pointer_mask(binary_shape):
+    """制作五分之六椭圆保留区：保留大部分表盘，只挖掉下方 ssi/螺丝附近区域。"""
+    h, w = binary_shape[:2]
+    mask = np.zeros((h, w), dtype=np.uint8)
+
+    center = (w // 2, h // 2)
+    axes = (max(1, w // 2), max(1, h // 2))
+
+    # 先保留完整椭圆，再挖掉下方 POINTER_MASK_CUT_WIDTH_DEG 度。
+    cv2.ellipse(mask, center, axes, 0, 0, 360, 255, -1)
+
+    cut_width_deg = max(0, min(180, int(POINTER_MASK_CUT_WIDTH_DEG)))
+    start_angle = 90 - cut_width_deg // 2
+    end_angle = 90 + cut_width_deg // 2
+    cv2.ellipse(mask, center, axes, 0, start_angle, end_angle, 0, -1)
+    return mask
+
+
+def is_black_near(binary, x, y):
+    """判断采样点附近 3x3 范围内是否有二值化后的黑色目标。"""
+    h, w = binary.shape[:2]
+    x1 = max(0, x - 1)
+    y1 = max(0, y - 1)
+    x2 = min(w, x + 2)
+    y2 = min(h, y + 2)
+    return np.max(binary[y1:y2, x1:x2]) > 0
+
+
 def find_pointer_point(image_raw, dashboard_box):
-    """用二值化+最大轮廓找指针中心点。"""
+    """用五分之六椭圆 mask + 射线扫描法寻找长指针方向点。"""
     frame_h, frame_w = image_raw.shape[:2]
     x1, y1, x2, y2 = refine_box(dashboard_box, frame_w, frame_h, ratio=0.5)
 
@@ -170,19 +201,81 @@ def find_pointer_point(image_raw, dashboard_box):
         return None
 
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray, POINTER_THRESHOLD, 255, cv2.THRESH_BINARY_INV)
+    _, binary_raw = cv2.threshold(gray, POINTER_THRESHOLD, 255, cv2.THRESH_BINARY_INV)
 
-    contours_data = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    contours = contours_data[-2]
-    if len(contours) == 0:
+    mask = make_pointer_mask(binary_raw.shape)
+    binary = cv2.bitwise_and(binary_raw, binary_raw, mask=mask)
+
+    dashboard_center = center_of_box(dashboard_box)
+    center_x = float(dashboard_center[0]) - float(x1)
+    center_y = float(dashboard_center[1]) - float(y1)
+
+    h, w = binary.shape[:2]
+    max_possible_r = int(min(w, h) * 0.50)
+    ray_min_r = max(1, int(POINTER_RAY_MIN_R))
+    ray_max_r = int(POINTER_RAY_MAX_R)
+    if ray_max_r <= ray_min_r:
+        ray_max_r = max_possible_r
+    ray_max_r = min(ray_max_r, max_possible_r)
+
+    best_score = -1
+    best_point_roi = None
+
+    for angle_deg in range(0, 360):
+        rad = math.radians(angle_deg)
+        cos_v = math.cos(rad)
+        sin_v = math.sin(rad)
+
+        current_run = 0
+        current_start = ray_min_r
+        max_run = 0
+        max_run_end = ray_min_r
+        hit_count = 0
+        farthest_hit = 0
+
+        for r in range(ray_min_r, ray_max_r + 1):
+            px = int(round(center_x + float(r) * cos_v))
+            py = int(round(center_y + float(r) * sin_v))
+
+            if px < 0 or px >= w or py < 0 or py >= h:
+                if current_run > max_run:
+                    max_run = current_run
+                    max_run_end = r - 1
+                current_run = 0
+                continue
+
+            if is_black_near(binary, px, py):
+                hit_count += 1
+                farthest_hit = r
+                if current_run == 0:
+                    current_start = r
+                current_run += 1
+            else:
+                if current_run > max_run:
+                    max_run = current_run
+                    max_run_end = r - 1
+                current_run = 0
+
+        if current_run > max_run:
+            max_run = current_run
+            max_run_end = ray_max_r
+
+        # 连续黑色长度优先，其次总命中数，最后偏向更远的点，减少短指针干扰。
+        score = max_run * 1000 + hit_count * 10 + farthest_hit
+        if score > best_score:
+            best_score = score
+            use_r = max_run_end if max_run_end > 0 else farthest_hit
+            best_point_roi = (
+                int(round(center_x + float(use_r) * cos_v)),
+                int(round(center_y + float(use_r) * sin_v)),
+            )
+
+    if best_point_roi is None or best_score <= 0:
         return None
 
-    max_contour = max(contours, key=cv2.contourArea)
-    rect = cv2.minAreaRect(max_contour)
-    px = int(rect[0][0]) + x1
-    py = int(rect[0][1]) + y1
+    px = best_point_roi[0] + x1
+    py = best_point_roi[1] + y1
     return np.array([px, py], dtype=np.float32)
-
 
 def nearest_ssi_box(dashboard_box, ssi_boxes):
     if len(ssi_boxes) == 0:
