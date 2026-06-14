@@ -21,16 +21,16 @@ if __name__ == "__main__":
 
     detector = SimpleInfer(show_stream=args.stream) #初始化摄像头
 
-    # ------------------------------------任务二---------------------------------
-    task2_new(robot, detector=detector, show_stream=args.stream)
+    # # ------------------------------------任务二---------------------------------
+    # task2_new(robot, detector=detector, show_stream=args.stream)
 
-    # ------------------------------------任务二和任务三的衔接--------------------
-    robot.move(last_time=7, vy=25000)
-    time.sleep(0.5)
-    robot.move(last_time=2.5, vx=-20000)
-    time.sleep(0.5)
-    robot.revolve_90_r()
-    time.sleep(0.5)
+    # # ------------------------------------任务二和任务三的衔接--------------------
+    # robot.move(last_time=7, vy=25000)
+    # time.sleep(0.5)
+    # robot.move(last_time=2.5, vx=-20000)
+    # time.sleep(0.5)
+    # robot.revolve_90_r()
+    # time.sleep(0.5)
 
     task2_3(robot, detector=detector)
 
