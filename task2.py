@@ -340,6 +340,7 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         # 一、先运动到第1个仪表盘附近
         # ----------------------------
+        dog.move(last_time=0.3, vz=10000)
         dog.move(last_time=2.5, vx=20000)
         time.sleep(0.5)
         dog.revolve_90_r()
