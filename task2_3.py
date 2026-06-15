@@ -115,7 +115,7 @@ def rotate_to_relative_yaw(dog, target_yaw_deg, tolerance_deg=3.0):
             )
         )
         dog.move(last_time=0.1, vz=vz_cmd)
-        time.sleep(0.15)
+        time.sleep(1)
 
     print("YAW: max adjustment steps reached, continue with current yaw")
     return read_current_yaw_deg()
