@@ -141,7 +141,7 @@ class Task3:
         return frame, []
 
     def x_move_by_depth(self, depth_mm):
-        if depth_mm is not None and float(depth_mm) < 500.0:
+        if depth_mm is not None and float(depth_mm) < 400.0:
             return 7000, 0.1
         return 10000, 0.3
     
