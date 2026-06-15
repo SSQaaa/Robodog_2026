@@ -29,8 +29,6 @@ def get_task3_status(records):
 
 def main():
     dog = None
-    task2_detector = None
-    task2_detector_preload = None
     task3_runner = None
     try:
 
@@ -40,15 +38,11 @@ def main():
         dog.stop()
 
         print("[Main] start task1")
-        print("[Main] preload task2 detector")
-        task2_detector_preload = task2.preload_detector()
         task1.run(dog)
 
         print("[Main] start task2")
-        task2_detector = task2_detector_preload.result()
-        task2_detector_preload = None
         try:
-            records = task2.run(dog, detector=task2_detector, close_detector=False)
+            records = task2.run(dog)
         except Exception:
             print("[Main] task2 failed, use default task3 status")
             traceback.print_exc()
@@ -57,9 +51,7 @@ def main():
         print(f"[Main] task3 status={status_by_letter}")
 
         print("[Main] start task2_3 bridge")
-        task2_3.task2_3(dog, task2_detector)
-        task2_detector.close()
-        task2_detector = None
+        task2_3.run(dog)
 
         print("[Main] reset arm before task3")
         reset_arm()
@@ -78,10 +70,6 @@ def main():
     finally:
         if task3_runner is not None:
             task3_runner.close()
-        if task2_detector is not None:
-            task2_detector.close()
-        if task2_detector_preload is not None:
-            task2_detector_preload.close_if_ready()
         if dog is not None:
             dog.stop()
             dog.close()
