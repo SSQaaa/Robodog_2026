@@ -192,6 +192,13 @@ def task2_3(dog, detector):
     max_distance_adjust_steps = 30
     stable_count = 0
 
+    dog.move(last_time=7, vy=25000)
+    time.sleep(0.5)
+    dog.move(last_time=2.5, vx=-20000)
+    time.sleep(0.5)
+    dog.revolve_90_r()
+    time.sleep(0.5)
+
     print("[Task2_3] start IMU yaw adjustment")
     final_yaw = rotate_to_relative_yaw(dog, target_yaw_deg)
     print("[Task2_3] yaw adjusted current={:.3f}, start C centering".format(final_yaw))
