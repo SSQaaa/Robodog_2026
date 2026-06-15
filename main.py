@@ -3,6 +3,7 @@ import traceback
 
 import task1
 import task2
+import task2_3
 from arm_control import reset_arm
 from project_config import DEFAULT_DASHBOARD_STATUS
 from task3 import Task3
@@ -27,6 +28,9 @@ def main():
         records = task2.run(dog)
         status_by_letter = resolve_dashboard_status(records, default_status=DEFAULT_DASHBOARD_STATUS)
         print(f"[Main] task3 status={status_by_letter}")
+
+        print("[Main] start task2_3 bridge")
+        task2_3.run(dog)
 
         print("[Main] reset arm before task3")
         reset_arm()
