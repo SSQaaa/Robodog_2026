@@ -185,7 +185,7 @@ def task2_3(dog, detector):
     c_x_center_max = 400
     c_distance_target_m = 1.50
     c_distance_tolerance_m = 0.20
-    target_yaw_deg = -90.0
+    target_yaw_deg = 0.0
 
     stable_need_frames = 3
     max_adjust_steps = 30

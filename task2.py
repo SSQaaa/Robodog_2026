@@ -352,7 +352,7 @@ def task2_new(dog, detector, show_stream=False):
         first_letter_x_center_min = 290
         first_letter_x_center_max = 320
         first_letter_distance_target_m = 0.35
-        first_letter_distance_tolerance_m = 0.05
+        first_letter_distance_tolerance_m = 0.10
         first_max_letter_align_adjust_count = 5
         first_max_letter_distance_adjust_count = 8
         first_max_ssi_check_retry_count = 5
@@ -384,7 +384,7 @@ def task2_new(dog, detector, show_stream=False):
         # print("BRIDGE: 开始IMU角度调整")
         # final_yaw = rotate_to_relative_yaw(dog, -174.0)
         # print("BRIDGE: IMU角度调整完成，当前yaw={:.3f}".format(final_yaw))
-        dog.move(last_time=0.2, vz=10000) #定
+        dog.move(last_time=0.18, vz=10000) #定
         time.sleep(0.8)
         dog.move(last_time =5.8, vx=20000)   #定
         time.sleep(0.5)
@@ -397,7 +397,7 @@ def task2_new(dog, detector, show_stream=False):
         second_letter_x_center_min = 310
         second_letter_x_center_max = 340
         second_letter_distance_target_m = 0.35
-        second_letter_distance_tolerance_m = 0.05
+        second_letter_distance_tolerance_m = 0.10
         second_max_letter_align_adjust_count = 5
         second_max_letter_distance_adjust_count = 8
         second_max_ssi_check_retry_count = 5
@@ -443,7 +443,7 @@ def task2_new(dog, detector, show_stream=False):
         third_letter_x_center_min = 290
         third_letter_x_center_max = 320
         third_letter_distance_target_m = 0.35
-        third_letter_distance_tolerance_m = 0.05
+        third_letter_distance_tolerance_m = 0.10
         third_max_letter_align_adjust_count = 5
         third_max_letter_distance_adjust_count = 8
         third_max_ssi_check_retry_count = 5
@@ -483,7 +483,7 @@ def task2_new(dog, detector, show_stream=False):
         fourth_letter_x_center_min = 290
         fourth_letter_x_center_max = 320
         fourth_letter_distance_target_m = 0.35
-        fourth_letter_distance_tolerance_m = 0.05
+        fourth_letter_distance_tolerance_m = 0.10
         fourth_max_letter_align_adjust_count = 5
         fourth_max_letter_distance_adjust_count = 8
         fourth_max_ssi_check_retry_count = 5

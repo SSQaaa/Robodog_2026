@@ -21,8 +21,8 @@ def main():
         dog.close_continue()
         dog.stop()
 
-        print("[Main] start task1")
-        task1.run(dog)
+        # print("[Main] start task1")
+        # task1.run(dog)
 
         print("[Main] start task2")
         records = task2.run(dog)
