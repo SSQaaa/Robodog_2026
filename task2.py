@@ -186,8 +186,8 @@ def _run_single_dashboard_with_detector(
             letter_state = "ALIGN"
             letter_align_adjust_count = 0
             letter_distance_adjust_count = 0
-            dog.move(last_time=0.10, vx=-7000)
-            time.sleep(0.2)
+            dog.move(last_time=0.3, vy=-18000)
+            time.sleep(0.3)
             continue
 
         letter = letter_det["letter"]
@@ -196,14 +196,14 @@ def _run_single_dashboard_with_detector(
 
         if letter_state == "ALIGN":
             if letter_x_center < letter_x_center_min:
-                dog.move(last_time=0.12, vy=-18000)
+                dog.move(last_time=0.3, vy=-25000)
                 time.sleep(0.5)
-                dog.move(last_time=0.01, vx=7000)
+                dog.move(last_time=0.15, vx=7000)
                 letter_align_adjust_count += 1
                 print("D{} LETTER_ALIGN: {} 偏左，左移，x_center={:.1f} 次数={}".format(dashboard_index, letter, letter_x_center, letter_align_adjust_count))
                 time.sleep(0.25)
             elif letter_x_center > letter_x_center_max:
-                dog.move(last_time=0.12, vy=15000)
+                dog.move(last_time=0.3, vy=25000)
                 letter_align_adjust_count += 1
                 print("D{} LETTER_ALIGN: {} 偏右，右移，x_center={:.1f} 次数={}".format(dashboard_index, letter, letter_x_center, letter_align_adjust_count))
                 time.sleep(0.25)
@@ -340,7 +340,7 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         # 一、先运动到第1个仪表盘附近
         # ----------------------------
-        dog.move(last_time=0.3, vz=10000)
+        # dog.move(last_time=0.28, vz=10000)
         dog.move(last_time=2.5, vx=20000)
         time.sleep(0.5)
         dog.revolve_90_r()
@@ -380,13 +380,13 @@ def task2_new(dog, detector, show_stream=False):
         dog.UPDOWN()
         time.sleep(0.5)
         dog.revolve_90_l()
-        time.sleep(0.5)
+        time.sleep(2)
         # print("BRIDGE: 开始IMU角度调整")
         # final_yaw = rotate_to_relative_yaw(dog, -174.0)
         # print("BRIDGE: IMU角度调整完成，当前yaw={:.3f}".format(final_yaw))
-        dog.move(last_time=0.38, vz=10000) #定
+        dog.move(last_time=0.2, vz=10000) #定
         time.sleep(0.8)
-        dog.move(last_time =5.5, vx=20000)   #定
+        dog.move(last_time =5.8, vx=20000)   #定
         time.sleep(0.5)
         dog.revolve_90_r()
         time.sleep(0.5)
@@ -426,15 +426,15 @@ def task2_new(dog, detector, show_stream=False):
         time.sleep(0.5)
         dog.revolve_90_l()
         time.sleep(0.5)
-        dog.move(last_time=0.23, vz=10000)
+        dog.move(last_time=0.25, vz=10000)
         time.sleep(0.5)
         dog.move(last_time=2.1, vx=15000)
         time.sleep(0.5)
         dog.revolve_90_l()
         time.sleep(0.5)
-        dog.move(last_time=4.2, vx=-15000)
+        dog.move(last_time=4, vx=-15000)
         time.sleep(0.5)
-        dog.move(last_time=4, vy=-25000)
+        dog.move(last_time=5, vy=-25000)
         time.sleep(0.5)
 
         # ----------------------------
