@@ -65,7 +65,7 @@ def _has_ssi_detection(infer_output):
     return False
 
 
-def _wait_single_dashboard(detector, robot):
+def _wait_single_dashboard(detector, dog):
     """普通循环：等待画面里只有一个仪表盘。"""
     while True:
         infer_output = detector.infer_once()
@@ -76,7 +76,7 @@ def _wait_single_dashboard(detector, robot):
 
         if result["dashboard_count"] <= 0:
             print("SEARCH: 没有仪表盘，继续等待")
-            robot.move(last_time=0.10, vx=-7000)
+            dog.move(last_time=0.10, vx=-7000)
             time.sleep(0.25)
         else:
             print("SEARCH: 多个仪表盘，继续等待")
@@ -160,7 +160,7 @@ def _read_letter_normal_loop(detector, need_frames=3, max_frames=40):
 
 def _run_single_dashboard_with_detector(
     detector,
-    robot,
+    dog,
     dashboard_index,
     letter_x_center_min,
     letter_x_center_max,
@@ -186,7 +186,7 @@ def _run_single_dashboard_with_detector(
             letter_state = "ALIGN"
             letter_align_adjust_count = 0
             letter_distance_adjust_count = 0
-            robot.move(last_time=0.10, vx=-7000)
+            dog.move(last_time=0.10, vx=-7000)
             time.sleep(0.2)
             continue
 
@@ -196,14 +196,14 @@ def _run_single_dashboard_with_detector(
 
         if letter_state == "ALIGN":
             if letter_x_center < letter_x_center_min:
-                robot.move(last_time=0.12, vy=-18000)
+                dog.move(last_time=0.12, vy=-18000)
                 time.sleep(0.5)
-                robot.move(last_time=0.01, vx=7000)
+                dog.move(last_time=0.01, vx=7000)
                 letter_align_adjust_count += 1
                 print("D{} LETTER_ALIGN: {} 偏左，左移，x_center={:.1f} 次数={}".format(dashboard_index, letter, letter_x_center, letter_align_adjust_count))
                 time.sleep(0.25)
             elif letter_x_center > letter_x_center_max:
-                robot.move(last_time=0.12, vy=15000)
+                dog.move(last_time=0.12, vy=15000)
                 letter_align_adjust_count += 1
                 print("D{} LETTER_ALIGN: {} 偏右，右移，x_center={:.1f} 次数={}".format(dashboard_index, letter, letter_x_center, letter_align_adjust_count))
                 time.sleep(0.25)
@@ -241,7 +241,7 @@ def _run_single_dashboard_with_detector(
                 letter_vx_abs = 7000
 
             letter_vx = letter_vx_abs if letter_error_m < 0 else -letter_vx_abs
-            robot.move(last_time=0.10, vx=letter_vx)
+            dog.move(last_time=0.10, vx=letter_vx)
             letter_distance_adjust_count += 1
             print(
                 "D{} LETTER_DISTANCE: {} 当前={:.3f}m 目标={:.3f}m 误差={:.3f}m vx={} 次数={}".format(
@@ -266,13 +266,13 @@ def _run_single_dashboard_with_detector(
     # ----------------------------
     # 三、普通循环：等待单仪表盘
     # ----------------------------
-    _wait_single_dashboard(detector, robot)
+    _wait_single_dashboard(detector, dog)
 
     # ----------------------------
     # 四、普通if：只做ssi可见性检查
     # ----------------------------
     time.sleep(1.8)
-    robot.UPDOWN()
+    dog.UPDOWN()
     time.sleep(2)
     ssi_check_retry_count = 0
     while True:
@@ -281,7 +281,7 @@ def _run_single_dashboard_with_detector(
 
         if result["dashboard_count"] != 1:
             print("D{} SSI_CHECK: 非单仪表盘，重新等待".format(dashboard_index))
-            _wait_single_dashboard(detector, robot)
+            _wait_single_dashboard(detector, dog)
             ssi_check_retry_count = 0
             continue
 
@@ -291,14 +291,14 @@ def _run_single_dashboard_with_detector(
             time.sleep(1.0)
             break
 
-        robot.move(last_time=0.02, vx=-7000)
+        dog.move(last_time=0.02, vx=-7000)
         ssi_check_retry_count += 1
         print("D{} SSI_CHECK: 未检测到ssi，后退微调，次数={}".format(dashboard_index, ssi_check_retry_count))
         time.sleep(0.25)
 
         if ssi_check_retry_count > max_ssi_check_retry_count:
             print("D{} SSI_CHECK: 超限，重新等待单仪表盘".format(dashboard_index))
-            _wait_single_dashboard(detector, robot)
+            _wait_single_dashboard(detector, dog)
             ssi_check_retry_count = 0
 
     # ----------------------------
@@ -327,7 +327,7 @@ def _run_single_dashboard_with_detector(
     return record
 
 
-def task2_new(robot, detector, show_stream=False):
+def task2_new(dog, detector, show_stream=False):
     """
     识别四个仪表盘，返回四条记录。
     """
@@ -340,9 +340,9 @@ def task2_new(robot, detector, show_stream=False):
         # ----------------------------
         # 一、先运动到第1个仪表盘附近
         # ----------------------------
-        robot.move(last_time=2.5, vx=20000)
+        dog.move(last_time=2.5, vx=20000)
         time.sleep(0.5)
-        robot.revolve_90_r()
+        dog.revolve_90_r()
         time.sleep(0.5)
 
         # ----------------------------
@@ -358,7 +358,7 @@ def task2_new(robot, detector, show_stream=False):
 
         first_record = _run_single_dashboard_with_detector(
             detector=detector,
-            robot=robot,
+            dog=dog,
             dashboard_index=1,
             letter_x_center_min=first_letter_x_center_min,
             letter_x_center_max=first_letter_x_center_max,
@@ -376,18 +376,18 @@ def task2_new(robot, detector, show_stream=False):
         # ----------------------------
         # 一、先运动到第2个仪表盘附近
         # ----------------------------
-        robot.UPDOWN()
+        dog.UPDOWN()
         time.sleep(0.5)
-        robot.revolve_90_l()
+        dog.revolve_90_l()
         time.sleep(0.5)
         # print("BRIDGE: 开始IMU角度调整")
-        # final_yaw = rotate_to_relative_yaw(robot, -174.0)
+        # final_yaw = rotate_to_relative_yaw(dog, -174.0)
         # print("BRIDGE: IMU角度调整完成，当前yaw={:.3f}".format(final_yaw))
-        robot.move(last_time=0.38, vz=10000) #定
+        dog.move(last_time=0.38, vz=10000) #定
         time.sleep(0.8)
-        robot.move(last_time =5.5, vx=20000)   #定
+        dog.move(last_time =5.5, vx=20000)   #定
         time.sleep(0.5)
-        robot.revolve_90_r()
+        dog.revolve_90_r()
         time.sleep(0.5)
 
         # ----------------------------
@@ -403,7 +403,7 @@ def task2_new(robot, detector, show_stream=False):
 
         second_record = _run_single_dashboard_with_detector(
             detector=detector,
-            robot=robot,
+            dog=dog,
             dashboard_index=2,
             letter_x_center_min=second_letter_x_center_min,
             letter_x_center_max=second_letter_x_center_max,
@@ -421,19 +421,19 @@ def task2_new(robot, detector, show_stream=False):
         # ----------------------------
         # 一、先运动到第3个仪表盘附近
         # ----------------------------
-        robot.UPDOWN()
+        dog.UPDOWN()
         time.sleep(0.5)
-        robot.revolve_90_l()
+        dog.revolve_90_l()
         time.sleep(0.5)
-        robot.move(last_time=0.23, vz=10000)
+        dog.move(last_time=0.23, vz=10000)
         time.sleep(0.5)
-        robot.move(last_time=2.1, vx=15000)
+        dog.move(last_time=2.1, vx=15000)
         time.sleep(0.5)
-        robot.revolve_90_l()
+        dog.revolve_90_l()
         time.sleep(0.5)
-        robot.move(last_time=4.2, vx=-15000)
+        dog.move(last_time=4.2, vx=-15000)
         time.sleep(0.5)
-        robot.move(last_time=4, vy=-25000)
+        dog.move(last_time=4, vy=-25000)
         time.sleep(0.5)
 
         # ----------------------------
@@ -449,7 +449,7 @@ def task2_new(robot, detector, show_stream=False):
 
         third_record = _run_single_dashboard_with_detector(
             detector=detector,
-            robot=robot,
+            dog=dog,
             dashboard_index=3,
             letter_x_center_min=third_letter_x_center_min,
             letter_x_center_max=third_letter_x_center_max,
@@ -467,13 +467,13 @@ def task2_new(robot, detector, show_stream=False):
         # ----------------------------
         # 一、先运动到第4个仪表盘附近
         # ----------------------------
-        robot.UPDOWN()
+        dog.UPDOWN()
         time.sleep(0.5)
-        robot.revolve_90_l()
+        dog.revolve_90_l()
         time.sleep(0.5)
-        robot.move(last_time=6, vx=20000)
+        dog.move(last_time=6, vx=20000)
         time.sleep(0.5)
-        robot.revolve_90_r()
+        dog.revolve_90_r()
         time.sleep(0.5)
 
         # ----------------------------
@@ -489,7 +489,7 @@ def task2_new(robot, detector, show_stream=False):
 
         fourth_record = _run_single_dashboard_with_detector(
             detector=detector,
-            robot=robot,
+            dog=dog,
             dashboard_index=4,
             letter_x_center_min=fourth_letter_x_center_min,
             letter_x_center_max=fourth_letter_x_center_max,
@@ -506,7 +506,7 @@ def task2_new(robot, detector, show_stream=False):
             summary_list.append([rec["dashboard_index"], rec["letter"], rec["dashboard_state"]])
         print("四个仪表盘汇总列表：{}".format(summary_list))
         print("task2_new finished")
-        robot.UPDOWN()
+        dog.UPDOWN()
         time.sleep(0.5)
 
     finally:
@@ -515,10 +515,11 @@ def task2_new(robot, detector, show_stream=False):
     return records
 
 
-def run(robot, show_stream=False):
+def run(dog, show_stream=False):
     detector = DashboardInfer(show_stream=show_stream)
     try:
-        return task2_new(robot, detector, show_stream=show_stream)
+        return task2_new(dog, detector, show_stream=show_stream)
     finally:
         detector.close()
         print("[Task2] detector closed")
+

@@ -11,6 +11,8 @@ import numpy as np
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ARM_DIR = os.path.join(BASE_DIR, "Arm")
+if not os.path.isdir(ARM_DIR):
+    ARM_DIR = os.path.join(BASE_DIR, "task3", "Arm")
 if ARM_DIR not in sys.path:
     sys.path.insert(0, ARM_DIR)
 
