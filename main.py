@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import traceback
-import time
+
 import task1
 import task2
 import task2_3
@@ -11,8 +11,26 @@ from tools.motion import DogControl
 from tools.vision import resolve_dashboard_status
 
 
+def get_task3_status(records):
+    if not records:
+        print("[Main] task2 did not return records, use default task3 status")
+        return dict(DEFAULT_DASHBOARD_STATUS)
+    try:
+        status_by_letter = resolve_dashboard_status(records, default_status=DEFAULT_DASHBOARD_STATUS)
+    except Exception:
+        print("[Main] failed to resolve task2 records, use default task3 status")
+        traceback.print_exc()
+        return dict(DEFAULT_DASHBOARD_STATUS)
+    if not status_by_letter:
+        print("[Main] task2 status is empty, use default task3 status")
+        return dict(DEFAULT_DASHBOARD_STATUS)
+    return status_by_letter
+
+
 def main():
     dog = None
+    task2_detector = None
+    task2_detector_preload = None
     task3_runner = None
     try:
 
@@ -22,17 +40,26 @@ def main():
         dog.stop()
 
         print("[Main] start task1")
+        print("[Main] preload task2 detector")
+        task2_detector_preload = task2.preload_detector()
         task1.run(dog)
 
         print("[Main] start task2")
-        records = task2.run(dog)
-        status_by_letter = resolve_dashboard_status(records, default_status=DEFAULT_DASHBOARD_STATUS)
+        task2_detector = task2_detector_preload.result()
+        task2_detector_preload = None
+        try:
+            records = task2.run(dog, detector=task2_detector, close_detector=False)
+        except Exception:
+            print("[Main] task2 failed, use default task3 status")
+            traceback.print_exc()
+            records = None
+        status_by_letter = get_task3_status(records)
         print(f"[Main] task3 status={status_by_letter}")
 
         print("[Main] start task2_3 bridge")
-        task2_3.run(dog)
-        time.sleep(1)
-        dog.revolve_180()
+        task2_3.task2_3(dog, task2_detector)
+        task2_detector.close()
+        task2_detector = None
 
         print("[Main] reset arm before task3")
         reset_arm()
@@ -51,6 +78,10 @@ def main():
     finally:
         if task3_runner is not None:
             task3_runner.close()
+        if task2_detector is not None:
+            task2_detector.close()
+        if task2_detector_preload is not None:
+            task2_detector_preload.close_if_ready()
         if dog is not None:
             dog.stop()
             dog.close()
