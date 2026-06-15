@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import traceback
-
+import time
 import task1
 import task2
 import task2_3
@@ -31,6 +31,8 @@ def main():
 
         print("[Main] start task2_3 bridge")
         task2_3.run(dog)
+        time.sleep(1)
+        dog.revolve_180()
 
         print("[Main] reset arm before task3")
         reset_arm()

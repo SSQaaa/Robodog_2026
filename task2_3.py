@@ -209,7 +209,7 @@ def task2_3(dog, detector):
 
         if det_c is None:
             print("[Task2_3] step={} C not detected, move forward to search".format(step + 1))
-            dog.move(last_time=0.2, vx=10000)
+            dog.move(last_time=0.4, vx=20000)
             stable_count = 0
             time.sleep(0.5)
             continue
@@ -217,14 +217,14 @@ def task2_3(dog, detector):
         c_x = _box_center_x(det_c)
         if c_x < c_x_center_min:
             print("[Task2_3] step={} C left x={:.1f}, shift left".format(step + 1, c_x))
-            dog.move(last_time=0.10, vy=-20000)
+            dog.move(last_time=0.3, vy=-25000)
             stable_count = 0
             time.sleep(0.25)
             continue
 
         if c_x > c_x_center_max:
             print("[Task2_3] step={} C right x={:.1f}, shift right".format(step + 1, c_x))
-            dog.move(last_time=0.10, vy=20000)
+            dog.move(last_time=0.3, vy=25000)
             stable_count = 0
             time.sleep(0.25)
             continue
