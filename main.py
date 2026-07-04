@@ -37,8 +37,13 @@ def main():
         dog.close_continue()
         dog.stop()
 
-        # print("[Main] start task1")
-        # task1.run(dog)
+        start_yaw_deg = task2_3.read_current_yaw_deg()
+        print("[Main] start_yaw_deg={:.3f}".format(start_yaw_deg))
+
+        print("[Main] start task1")
+        task1.run(dog)
+        time.sleep(2)
+        dog.move(last_time=0.18, vz=10000)
 
         print("[Main] start task2")
         try:
@@ -51,9 +56,10 @@ def main():
         print(f"[Main] task3 status={status_by_letter}")
 
         print("[Main] start task2_3 bridge")
-        task2_3.run(dog)
+        task2_3.run(dog, start_yaw_deg=start_yaw_deg)
+        time.sleep(2)
         dog.revolve_180()
-        time.sleep(0.5)
+        time.sleep(2)
 
         print("[Main] reset arm before task3")
         reset_arm()

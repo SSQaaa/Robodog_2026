@@ -180,12 +180,12 @@ def _adjust_c_distance(dog, detector, target_m, tolerance_m, stable_need_frames,
     return None
 
 
-def task2_3(dog, detector):
+def task2_3(dog, detector, start_yaw_deg):
     c_x_center_min = 350
     c_x_center_max = 400
     c_distance_target_m = 1.50
     c_distance_tolerance_m = 0.20
-    target_yaw_deg = 0.0
+    target_yaw_deg = start_yaw_deg - 90.0
 
     stable_need_frames = 3
     max_adjust_steps = 30
@@ -263,10 +263,10 @@ def task2_3(dog, detector):
     )
 
 
-def run(dog, show_stream=False):
+def run(dog, show_stream=False, start_yaw_deg=0.0):
     detector = DashboardInfer(show_stream=show_stream)
     try:
-        return task2_3(dog, detector)
+        return task2_3(dog, detector, start_yaw_deg)
     finally:
         detector.close()
         print("[Task2_3] detector closed")

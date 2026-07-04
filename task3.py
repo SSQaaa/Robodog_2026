@@ -18,6 +18,9 @@ DASHBOARD_STATUS = DEFAULT_DASHBOARD_STATUS
 STATUS_TO_BLOCK = {
     "ABNORMAL": "Red",
     "NORMAL": "Green",
+    "正常": "Green",
+    "偏低": "Red",
+    "偏高": "Red",
 }
 
 CENTER_TOLERANCE_BLOCK_PX = 100  # 中心值+-100就认为绿/红色物块在画面中心，主要是因为离得比较近
@@ -67,7 +70,7 @@ class Task3:
         abnormal_letters = [
             letter
             for letter in ("A", "B", "C", "D")
-            if self.status_dict.get(letter) == "ABNORMAL"
+            if STATUS_TO_BLOCK.get(self.status_dict.get(letter)) == "Red"
         ]
         if not abnormal_letters:
             print("[TASK3] no abnormal red block to pick")
