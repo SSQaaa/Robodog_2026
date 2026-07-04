@@ -186,7 +186,7 @@ def _run_single_dashboard_with_detector(
             letter_state = "ALIGN"
             letter_align_adjust_count = 0
             letter_distance_adjust_count = 0
-            dog.move(last_time=0.3, vy=-18000)
+            dog.move(last_time=0.3, vx=-18000)
             time.sleep(0.3)
             continue
 
@@ -340,10 +340,9 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         # 一、先运动到第1个仪表盘附近
         # ----------------------------
-        # dog.move(last_time=0.28, vz=10000)
-        dog.move(last_time=2.5, vx=20000)
+        dog.move(last_time=7, vx=20000)
         time.sleep(0.5)
-        dog.revolve_90_r()
+        dog.move(last_time=5, vy=25000)
         time.sleep(0.5)
 
         # ----------------------------
@@ -379,23 +378,25 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         dog.UPDOWN()
         time.sleep(0.5)
-        dog.revolve_90_l()
-        time.sleep(2)
+        dog.revolve_180()
+        time.sleep(0.5)
+        dog.move(last_time=2, vx=20000)
+        time.sleep(0.5)
         # print("BRIDGE: 开始IMU角度调整")
         # final_yaw = rotate_to_relative_yaw(dog, -174.0)
         # print("BRIDGE: IMU角度调整完成，当前yaw={:.3f}".format(final_yaw))
-        dog.move(last_time=0.18, vz=10000) #定
-        time.sleep(0.8)
-        dog.move(last_time =5.8, vx=20000)   #定
-        time.sleep(0.5)
-        dog.revolve_90_r()
-        time.sleep(0.5)
+        # dog.move(last_time=0.18, vz=10000) #定
+        # time.sleep(0.8)
+        # dog.move(last_time =5.8, vx=20000)   #定
+        # time.sleep(0.5)
+        # dog.revolve_90_r()
+        # time.sleep(0.5)
 
         # ----------------------------
         # 第2个仪表盘阈值
         # ----------------------------
-        second_letter_x_center_min = 310
-        second_letter_x_center_max = 340
+        second_letter_x_center_min = 290
+        second_letter_x_center_max = 320
         second_letter_distance_target_m = 0.35
         second_letter_distance_tolerance_m = 0.10
         second_max_letter_align_adjust_count = 5
@@ -424,19 +425,12 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         dog.UPDOWN()
         time.sleep(0.5)
-        dog.revolve_90_l()
+        dog.move(last_time=4.5, vy=-25000)
         time.sleep(0.5)
-        dog.move(last_time=0.25, vz=10000)
+        dog.move(last_time=2.3, vx=20000)
         time.sleep(0.5)
-        dog.move(last_time=2.1, vx=15000)
+        dog.revolve_90_r()
         time.sleep(0.5)
-        dog.revolve_90_l()
-        time.sleep(0.5)
-        dog.move(last_time=4, vx=-15000)
-        time.sleep(0.5)
-        dog.move(last_time=5, vy=-25000)
-        time.sleep(0.5)
-
         # ----------------------------
         # 第3个仪表盘阈值
         # ----------------------------
@@ -470,11 +464,13 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         dog.UPDOWN()
         time.sleep(0.5)
-        dog.revolve_90_l()
+        dog.revolve_90_r()
+        time.sleep(2)
+        dog.move(last_time=0.18, vz=10000)
         time.sleep(0.5)
         dog.move(last_time=6, vx=20000)
         time.sleep(0.5)
-        dog.revolve_90_r()
+        dog.revolve_90_l()
         time.sleep(0.5)
 
         # ----------------------------

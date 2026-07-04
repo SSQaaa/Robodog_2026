@@ -162,7 +162,7 @@ def _adjust_c_distance(dog, detector, target_m, tolerance_m, stable_need_frames,
             continue
 
         stable_count = 0
-        vx_abs = 15000 if abs(error_m) > 0.50 else 10000
+        vx_abs = 25000 if abs(error_m) > 0.50 else 20000
         vx_cmd = vx_abs if error_m < 0 else -vx_abs
         print(
             "BRIDGE_DISTANCE: step={} current={:.3f}m target={:.3f}m error={:.3f}m vx={}".format(
@@ -173,7 +173,7 @@ def _adjust_c_distance(dog, detector, target_m, tolerance_m, stable_need_frames,
                 vx_cmd,
             )
         )
-        dog.move(last_time=0.12, vx=vx_cmd)
+        dog.move(last_time=0.2, vx=vx_cmd)
         time.sleep(0.4)
 
     print("BRIDGE_DISTANCE: max adjustment steps reached")
@@ -192,9 +192,9 @@ def task2_3(dog, detector):
     max_distance_adjust_steps = 30
     stable_count = 0
 
-    dog.move(last_time=7, vy=25000)
-    time.sleep(0.5)
-    dog.move(last_time=2.5, vx=-20000)
+    # dog.move(last_time=7, vy=25000)
+    # time.sleep(0.5)
+    dog.move(last_time=3.2, vx=-20000)
     time.sleep(0.5)
     dog.revolve_90_r()
     time.sleep(0.5)
@@ -209,7 +209,7 @@ def task2_3(dog, detector):
 
         if det_c is None:
             print("[Task2_3] step={} C not detected, move forward to search".format(step + 1))
-            dog.move(last_time=0.4, vx=20000)
+            dog.move(last_time=0.4, vx=-20000)
             stable_count = 0
             time.sleep(0.5)
             continue
