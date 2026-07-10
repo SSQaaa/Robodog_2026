@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 import ctypes
 import math
+import queue
 import sys
+import threading
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
@@ -33,6 +35,72 @@ POINTER_RAY_MIN_R = 11
 POINTER_RAY_MAX_R = 85
 NORMAL_ANGLE_MIN = 120.0
 NORMAL_ANGLE_MAX = 180.0
+FRAME_WAIT_TIMEOUT_S = 0.5
+FRAME_MAX_AGE_S = 0.25
+
+
+class LatestColorFrame:
+    """Continuously capture frames while retaining only the newest one."""
+
+    def __init__(self, camera):
+        self.camera = camera
+        self._frames = queue.Queue(maxsize=1)
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(
+            target=self._capture_loop,
+            name="orbbec-latest-color-frame",
+            daemon=True,
+        )
+
+    def start(self):
+        self._thread.start()
+        return self
+
+    def _capture_loop(self):
+        while not self._stop_event.is_set():
+            try:
+                frame = self.camera.get_color_frame()
+            except Exception:
+                if not self._stop_event.is_set():
+                    print("[Camera] failed to capture color frame")
+                break
+            if frame is None:
+                time.sleep(0.005)
+                continue
+
+            item = (time.monotonic(), np.asarray(frame, dtype=np.uint8).copy())
+            try:
+                self._frames.put_nowait(item)
+            except queue.Full:
+                try:
+                    self._frames.get_nowait()
+                except queue.Empty:
+                    pass
+                try:
+                    self._frames.put_nowait(item)
+                except queue.Full:
+                    pass
+
+    def get(self, timeout_s=FRAME_WAIT_TIMEOUT_S, max_age_s=FRAME_MAX_AGE_S):
+        deadline = time.monotonic() + float(timeout_s)
+        while not self._stop_event.is_set():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            try:
+                captured_at, frame = self._frames.get(timeout=remaining)
+            except queue.Empty:
+                return None
+            if time.monotonic() - captured_at <= float(max_age_s):
+                return frame
+            # An old frame is never used; wait for a fresh replacement until timeout.
+        return None
+
+    def request_stop(self):
+        self._stop_event.set()
+
+    def join(self, timeout_s=1.0):
+        self._thread.join(timeout=float(timeout_s))
 
 
 def load_yolo_runtime():
@@ -284,6 +352,7 @@ class YoloDepthDetector:
         self.min_valid_depth_count = int(min_valid_depth_count)
         self.detector = None
         self.camera = None
+        self.frame_reader = None
         self.color_intrinsics = None
         self.depth_intrinsics = None
         self.depth_size = None
@@ -303,19 +372,24 @@ class YoloDepthDetector:
         self.depth_intrinsics = self.camera.get_depth_intrinsics()
         self.depth_size = self.camera.get_depth_size()
         self.color_size = self.camera.get_color_size()
+        self.frame_reader = LatestColorFrame(self.camera).start()
         print(f"[Orbbec] color size: {self.color_size}")
         print(f"[Orbbec] depth size : {self.depth_size}")
         return self
 
     def stop(self):
+        if self.frame_reader is not None:
+            self.frame_reader.request_stop()
         if self.camera is not None:
             self.camera.stop()
+        if self.frame_reader is not None:
+            self.frame_reader.join()
+            self.frame_reader = None
 
     def get_frame(self):
-        frame = self.camera.get_color_frame()
-        if frame is None:
+        if self.frame_reader is None:
             return None
-        return np.asarray(frame, dtype=np.uint8).copy()
+        return self.frame_reader.get()
 
     def detect(self):
         frame = self.get_frame()
@@ -380,12 +454,13 @@ class DashboardInfer:
         time.sleep(0.8)
         self.depth_w, self.depth_h = self.cam.get_depth_size()
         self.color_w, self.color_h = self.cam.get_color_size()
+        self.frame_reader = LatestColorFrame(self.cam).start()
 
     def infer_once(self):
-        frame = self.cam.get_color_frame()
-        if frame is None:
+        image_raw = self.frame_reader.get()
+        if image_raw is None:
+            print("[Camera] fresh frame timeout, skip inference")
             return {"image_raw": None, "detections": [], "infer_ms": 0.0}
-        image_raw = np.asarray(frame, dtype=np.uint8).copy()
         color_h, color_w = image_raw.shape[:2]
         t0 = time.time()
         raw_detections = self.detector.detect(image_raw)
@@ -426,7 +501,9 @@ class DashboardInfer:
         cv2.waitKey(1)
 
     def close(self):
+        self.frame_reader.request_stop()
         self.cam.stop()
+        self.frame_reader.join()
         if self.show_stream:
             cv2.destroyAllWindows()
 
