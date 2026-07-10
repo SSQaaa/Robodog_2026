@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 任务2新版本（只做第一个仪表盘）
 
@@ -365,8 +365,8 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         # 第1个仪表盘阈值
         # ----------------------------
-        first_letter_x_center_min = 290
-        first_letter_x_center_max = 320
+        first_letter_x_center_min = 345
+        first_letter_x_center_max = 375
         first_letter_distance_target_m = 0.35
         first_letter_distance_tolerance_m = 0.10
         first_max_letter_align_adjust_count = 15
@@ -412,8 +412,8 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         # 第2个仪表盘阈值
         # ----------------------------
-        second_letter_x_center_min = 290
-        second_letter_x_center_max = 320
+        second_letter_x_center_min = 345
+        second_letter_x_center_max = 375
         second_letter_distance_target_m = 0.35
         second_letter_distance_tolerance_m = 0.10
         second_max_letter_align_adjust_count = 15
@@ -451,8 +451,8 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         # 第3个仪表盘阈值
         # ----------------------------
-        third_letter_x_center_min = 290
-        third_letter_x_center_max = 320
+        third_letter_x_center_min = 345
+        third_letter_x_center_max = 375
         third_letter_distance_target_m = 0.35
         third_letter_distance_tolerance_m = 0.10
         third_max_letter_align_adjust_count = 15
@@ -494,8 +494,8 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         # 第4个仪表盘阈值
         # ----------------------------
-        fourth_letter_x_center_min = 290
-        fourth_letter_x_center_max = 320
+        fourth_letter_x_center_min = 345
+        fourth_letter_x_center_max = 375
         fourth_letter_distance_target_m = 0.35
         fourth_letter_distance_tolerance_m = 0.10
         fourth_max_letter_align_adjust_count = 15
