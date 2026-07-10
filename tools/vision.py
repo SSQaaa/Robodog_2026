@@ -5,6 +5,7 @@ import queue
 import sys
 import threading
 import time
+import zlib
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Optional
@@ -37,6 +38,7 @@ NORMAL_ANGLE_MIN = 120.0
 NORMAL_ANGLE_MAX = 180.0
 FRAME_WAIT_TIMEOUT_S = 0.5
 FRAME_MAX_AGE_S = 0.25
+FRAME_POLL_INTERVAL_S = 1.0 / 60.0
 
 
 class LatestColorFrame:
@@ -57,7 +59,9 @@ class LatestColorFrame:
         return self
 
     def _capture_loop(self):
+        last_fingerprint = None
         while not self._stop_event.is_set():
+            loop_started_at = time.monotonic()
             try:
                 frame = self.camera.get_color_frame()
             except Exception:
@@ -68,7 +72,18 @@ class LatestColorFrame:
                 time.sleep(0.005)
                 continue
 
-            item = (time.monotonic(), np.asarray(frame, dtype=np.uint8).copy())
+            image = np.asarray(frame, dtype=np.uint8).copy()
+            # Some camera wrappers return the last cached ndarray immediately.
+            # Do not refresh its timestamp unless the image actually changed.
+            sample = np.ascontiguousarray(image[::8, ::8])
+            fingerprint = zlib.crc32(sample.tobytes())
+            if fingerprint == last_fingerprint:
+                elapsed = time.monotonic() - loop_started_at
+                time.sleep(max(0.0, FRAME_POLL_INTERVAL_S - elapsed))
+                continue
+            last_fingerprint = fingerprint
+
+            item = (time.monotonic(), image)
             try:
                 self._frames.put_nowait(item)
             except queue.Full:
@@ -80,6 +95,9 @@ class LatestColorFrame:
                     self._frames.put_nowait(item)
                 except queue.Full:
                     pass
+
+            elapsed = time.monotonic() - loop_started_at
+            time.sleep(max(0.0, FRAME_POLL_INTERVAL_S - elapsed))
 
     def get(self, timeout_s=FRAME_WAIT_TIMEOUT_S, max_age_s=FRAME_MAX_AGE_S):
         deadline = time.monotonic() + float(timeout_s)
