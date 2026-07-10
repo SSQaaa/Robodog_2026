@@ -60,6 +60,9 @@ COLOR_FX = 453.72
 CAM_ON_ROBOT_X_M = 0.2
 CAM_ON_ROBOT_Y_M = 0.0
 
+# 锥桶四周的默认安全距离，单位：毫米。
+CONE_CLEARANCE_MM = 10
+
 
 @dataclass(frozen=True)
 class Rect:
@@ -119,7 +122,7 @@ class CorridorPlanner:
         cone_w_mm: int = 320,
         cone_l_mm: int = 320,
         grid_step_mm: int = 50,
-        clearance_mm: int = 200,
+        clearance_mm: int = CONE_CLEARANCE_MM,
         start_mm: Point = TASK1_START_MM,
         finish_mm: Point = TASK1_FINISH_MM,
     ) -> None:
