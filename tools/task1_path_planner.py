@@ -93,7 +93,7 @@ class Rect:
 
     def contains_point(self, point: Point) -> bool:
         px, py = point
-        return self.left <= px <= self.right and self.bottom <= py <= self.top
+        return self.left < px < self.right and self.bottom < py < self.top
 
 
 @dataclass
@@ -600,7 +600,7 @@ def detect_cone_y_mm(expected_count: int = 2) -> List[int]:
 
     y_values = []
     for tid, (x_cam, z_cam) in position_estimates.items():
-        plan_y = TASK1_START_MM[1] + int(round((CAM_ON_ROBOT_Y_M + x_cam) * 1000))
+        plan_y = TASK1_START_MM[1] - int(round((CAM_ON_ROBOT_Y_M + x_cam) * 1000))
         plan_x_from_camera = TASK1_START_MM[0] + int(round((CAM_ON_ROBOT_X_M + z_cam) * 1000))
         print("camera cone{}: x_from_camera={} y={} mm".format(tid, plan_x_from_camera, plan_y))
         y_values.append(plan_y)
@@ -631,15 +631,17 @@ def show_plan_result(planner: CorridorPlanner, result: PlanResult) -> None:
 
 
 def run_distance_input(planner: CorridorPlanner, out_path: Path) -> None:
-    x_values = [input_int_mm("{} cone x mm: ".format(name)) for name in ("left", "right")]
+    x_values = [input_int_mm("{} cone x from x=0 line mm: ".format(name)) for name in ("left", "right")]
 
     y_values = detect_cone_y_mm(expected_count=2)
     for name, y in zip(("left", "right"), y_values):
         print("{} cone y = {} mm".format(name, y))
 
     cones: List[Rect] = []
-    for x, y in zip(x_values, y_values):
-        cones.append(planner.cone_from_center((x, y)))
+    for name, x, y in zip(("left", "right"), x_values, y_values):
+        cone = planner.cone_from_center((x, y))
+        print("{} cone plan center = ({}, {}) mm".format(name, cone.center[0], cone.center[1]))
+        cones.append(cone)
 
     result = planner.plan_with_cones(cones)
     saved_svg_path = write_plan_files(result, out_path)
