@@ -324,8 +324,9 @@ class CanvasMapper:
         self.planner = planner
         self.scale = scale
         self.margin = margin
-        self.min_x = planner.start[0]
-        self.max_x = planner.finish[0]
+        robot_half_l = planner.robot.w // 2
+        self.min_x = planner.start[0] - robot_half_l
+        self.max_x = planner.finish[0] + robot_half_l
         self.min_y = 0
         self.max_y = planner.corridor.h
         self.width = int((self.max_x - self.min_x) * scale + margin * 2)

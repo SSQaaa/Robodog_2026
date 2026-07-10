@@ -65,6 +65,15 @@ def load_path_plan_data(path=PLAN_PATH):
                 data.get("finish_mm"),
             )
         )
+    if waypoints[0] != expected_start or waypoints[-1] != expected_finish:
+        raise RuntimeError(
+            "Task1 path plan waypoint mismatch. expected first={} last={}, got first={} last={}. Run tools/task1_path_planner.py again.".format(
+                expected_start,
+                expected_finish,
+                waypoints[0],
+                waypoints[-1],
+            )
+        )
     return data
 
 
@@ -266,6 +275,7 @@ def execute_path(dog: DogControl, waypoints_m, start_world_pose):
 
 def run(dog: DogControl, plan_path=PLAN_PATH):
     print("[Task1] DogControl class from {}.{}".format(dog.__class__.__module__, dog.__class__.__name__))
+    print("[Task1] loading path plan: {}".format(os.path.abspath(plan_path)))
     plan_data = load_path_plan_data(plan_path)
     waypoints_m = [(float(x) / 1000.0, float(y) / 1000.0) for x, y in plan_data["waypoints_mm"]]
     start_world_pose = read_world_pose_once()
