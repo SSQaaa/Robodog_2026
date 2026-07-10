@@ -191,6 +191,7 @@ def task2_3(dog, detector, start_yaw_deg):
     max_adjust_steps = 30
     max_distance_adjust_steps = 30
     stable_count = 0
+    c_missing_count = 0
 
     # dog.move(last_time=7, vy=25000)
     # time.sleep(0.5)
@@ -208,13 +209,20 @@ def task2_3(dog, detector, start_yaw_deg):
         det_c = _pick_best_by_class(infer_output.get("detections", []), 2)
 
         if det_c is None:
-            print("[Task2_3] step={} C not detected, move forward to search".format(step + 1))
-            dog.move(last_time=0.4, vx=-20000)
+            c_missing_count += 1
+            print("[Task2_3] step={} C not detected, wait {}/3".format(step + 1, c_missing_count))
             stable_count = 0
-            time.sleep(0.5)
+            time.sleep(1.5)
+
+            if c_missing_count >= 3:
+                print("[Task2_3] C not detected 3 times, move back a little")
+                dog.move(last_time=0.10, vx=-7000)
+                c_missing_count = 0
+                time.sleep(0.5)
             continue
 
         c_x = _box_center_x(det_c)
+        c_missing_count = 0
         if c_x < c_x_center_min:
             print("[Task2_3] step={} C left x={:.1f}, shift left".format(step + 1, c_x))
             dog.move(last_time=0.3, vy=-25000)
