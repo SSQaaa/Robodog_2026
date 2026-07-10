@@ -187,8 +187,8 @@ def _run_single_dashboard_with_detector(
             letter_state = "ALIGN"
             letter_align_adjust_count = 0
             letter_distance_adjust_count = 0
-            dog.move(last_time=0.3, vx=-18000)
-            time.sleep(0.3)
+            dog.move(last_time=0.1, vx=-10000)
+            time.sleep(1.5)
             continue
 
         letter = letter_det["letter"]
