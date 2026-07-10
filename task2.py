@@ -222,12 +222,19 @@ def _run_single_dashboard_with_detector(
 
         if letter_state == "DISTANCE":
             if letter_distance_m is None:
-                print("D{} LETTER_DISTANCE: 深度无效，回到LETTER_ALIGN".format(dashboard_index))
-                letter_state = "ALIGN"
-                letter_align_adjust_count = 0
-                letter_distance_adjust_count = 0
-                time.sleep(0.2)
-                continue
+                print("D{} LETTER_DISTANCE: 深度无效，先等待0.5秒再重新确认".format(dashboard_index))
+                time.sleep(0.5)
+
+                infer_output = detector.infer_once()
+                letter_det = _pick_best_letter_detection(infer_output)
+
+                if letter_det is None or letter_det["distance_m"] is None:
+                    print("D{} LETTER_DISTANCE: 等待后仍然深度无效，后退一点".format(dashboard_index))
+                    dog.move(last_time=0.10, vx=-10000)
+                    time.sleep(0.5)
+                    continue
+
+                letter_distance_m = letter_det["distance_m"]
 
             letter_error_m = letter_distance_target_m - float(letter_distance_m)
             if abs(letter_error_m) <= letter_distance_tolerance_m:
@@ -354,9 +361,9 @@ def task2_new(dog, detector, show_stream=False):
         first_letter_x_center_max = 320
         first_letter_distance_target_m = 0.35
         first_letter_distance_tolerance_m = 0.10
-        first_max_letter_align_adjust_count = 5
-        first_max_letter_distance_adjust_count = 8
-        first_max_ssi_check_retry_count = 5
+        first_max_letter_align_adjust_count = 15
+        first_max_letter_distance_adjust_count = 20
+        first_max_ssi_check_retry_count = 15
 
         first_record = _run_single_dashboard_with_detector(
             detector=detector,
@@ -401,9 +408,9 @@ def task2_new(dog, detector, show_stream=False):
         second_letter_x_center_max = 320
         second_letter_distance_target_m = 0.35
         second_letter_distance_tolerance_m = 0.10
-        second_max_letter_align_adjust_count = 5
-        second_max_letter_distance_adjust_count = 8
-        second_max_ssi_check_retry_count = 5
+        second_max_letter_align_adjust_count = 15
+        second_max_letter_distance_adjust_count = 20
+        second_max_ssi_check_retry_count = 15
 
         second_record = _run_single_dashboard_with_detector(
             detector=detector,
@@ -440,9 +447,9 @@ def task2_new(dog, detector, show_stream=False):
         third_letter_x_center_max = 320
         third_letter_distance_target_m = 0.35
         third_letter_distance_tolerance_m = 0.10
-        third_max_letter_align_adjust_count = 5
-        third_max_letter_distance_adjust_count = 8
-        third_max_ssi_check_retry_count = 5
+        third_max_letter_align_adjust_count = 15
+        third_max_letter_distance_adjust_count = 20
+        third_max_ssi_check_retry_count = 15
 
         third_record = _run_single_dashboard_with_detector(
             detector=detector,
@@ -483,9 +490,9 @@ def task2_new(dog, detector, show_stream=False):
         fourth_letter_x_center_max = 320
         fourth_letter_distance_target_m = 0.35
         fourth_letter_distance_tolerance_m = 0.10
-        fourth_max_letter_align_adjust_count = 5
-        fourth_max_letter_distance_adjust_count = 8
-        fourth_max_ssi_check_retry_count = 5
+        fourth_max_letter_align_adjust_count = 15
+        fourth_max_letter_distance_adjust_count = 20
+        fourth_max_ssi_check_retry_count = 15
 
         fourth_record = _run_single_dashboard_with_detector(
             detector=detector,
