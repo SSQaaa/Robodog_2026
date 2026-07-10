@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 任务2新版本（只做第一个仪表盘）
 
@@ -177,23 +177,31 @@ def _run_single_dashboard_with_detector(
     letter_state = "ALIGN"  # ALIGN / DISTANCE
     letter_align_adjust_count = 0
     letter_distance_adjust_count = 0
+    letter_missing_count = 0
 
     while True:
         infer_output = detector.infer_once()
         letter_det = _pick_best_letter_detection(infer_output)
 
         if letter_det is None:
-            print("D{} LETTER_PRECHECK: 字母未识别，继续等待".format(dashboard_index))
+            letter_missing_count += 1
+            print("D{} LETTER_PRECHECK: 字母未识别，等待第{}次".format(dashboard_index, letter_missing_count))
             letter_state = "ALIGN"
             letter_align_adjust_count = 0
             letter_distance_adjust_count = 0
-            dog.move(last_time=0.1, vx=-10000)
             time.sleep(1.5)
+
+            if letter_missing_count >= 3:
+                print("D{} LETTER_PRECHECK: 连续3次未识别到字母，后退一点".format(dashboard_index))
+                dog.move(last_time=0.10, vx=-7000)
+                letter_missing_count = 0
+                time.sleep(0.5)
             continue
 
         letter = letter_det["letter"]
         letter_x_center = float(letter_det["x_center"])
         letter_distance_m = letter_det["distance_m"]
+        letter_missing_count = 0
 
         if letter_state == "ALIGN":
             if letter_x_center < letter_x_center_min:
