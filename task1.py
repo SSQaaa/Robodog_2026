@@ -22,7 +22,7 @@ LATERAL_COMMAND_SIGN = 1.0
 PLAN_YAW_OFFSET_RAD = 0.0
 
 FORWARD_VX = 15000
-FORWARD_SPEED_MPS = 0.5
+FORWARD_SPEED_MPS = 0.4
 
 LATERAL_VY = 18000
 LATERAL_SPEED_MPS = 0.12
@@ -37,7 +37,7 @@ Y_CORRECT_MIN_STEP_S = 0.3
 Y_CORRECT_MAX_STEP_S = 1.2
 MOVE_SETTLE_S = 0.50
 
-WAYPOINT_TOLERANCE_M = 0.15
+WAYPOINT_TOLERANCE_M = 0.12
 MAX_X_CORRECT_STEPS = 10
 MAX_Y_CORRECT_STEPS = 10
 HEADING_CALIBRATION_MIN_DISTANCE_M = 0.50
@@ -160,8 +160,8 @@ def drive_axis_segment(dog: DogControl, axis, distance_m):
         last_time = abs(distance_m) / speed_mps
         print("[Task1][Move] y distance={:.3f}m vy={} time={:.2f}s".format(distance_m, command, last_time))
         dog.move(vy=command, last_time=last_time, duration=MOVE_SETTLE_S)
-        time.sleep(0.5)
-        dog.move(last_time=0.12, vx=10000)
+        # time.sleep(0.5)
+        dog.move(last_time=0.12*last_time, vx=10000)
         print("[Task1][Move] y correction 10000 0.12")
         return
 
@@ -210,8 +210,8 @@ def correct_y_to_target(dog: DogControl, start_world_pose, target_y_m):
         vy = int(command_sign * LATERAL_COMMAND_SIGN * Y_CORRECT_VY)
         step_s = correction_time_s(error_y, Y_CORRECT_SPEED_MPS, Y_CORRECT_MIN_STEP_S, Y_CORRECT_MAX_STEP_S)
         dog.move(vy=vy, last_time=step_s, duration=MOVE_SETTLE_S)
-        time.sleep(0.5)
-        dog.move(last_time=0.12, vx=10000)
+        # time.sleep(0.5)
+        dog.move(last_time=0.12*step_s, vx=10000)
         print("[Task1][CorrectY] y correction step: vy={} time={:.2f}s".format(vy, step_s))
         print("[Task1][Move] y correction 10000 0.1")
 

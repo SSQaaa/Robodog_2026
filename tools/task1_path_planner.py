@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Interactive path planner for task1 cone avoidance.
+Task1 cone path planner.
 
 Coordinate system, unit: millimetres
 - x: forward direction in the plan frame, from corridor entrance to exit.
@@ -13,16 +13,20 @@ Coordinate system, unit: millimetres
 - start/finish centers come from task1.py START_PLAN_* and FINISH_PLAN_* constants.
 
 Run:
-    python 2026Project/task1_path_planner.py
+    python tools/task1_path_planner.py
+    input two cone x values in left-to-right order, unit: mm.
+    cone y values are measured from the depth camera.
 """
 
 from __future__ import annotations
 
-import argparse
+import ctypes
 import heapq
 import json
 import math
 import sys
+import time
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
@@ -39,6 +43,22 @@ from task1 import FINISH_PLAN_X_M, FINISH_PLAN_Y_M, START_PLAN_X_M, START_PLAN_Y
 
 TASK1_START_MM = (int(round(START_PLAN_X_M * 1000)), int(round(START_PLAN_Y_M * 1000)))
 TASK1_FINISH_MM = (int(round(FINISH_PLAN_X_M * 1000)), int(round(FINISH_PLAN_Y_M * 1000)))
+
+CONF_THRESH = 0.5
+MIN_VALID_DEPTH_COUNT = 10
+DEPTH_HISTORY_LEN = 5
+DETECTION_FRAMES = 15
+TARGET_CLASS = 7
+
+DEPTH_FX = 478.547
+DEPTH_FY = 478.547
+DEPTH_CX = 321.087
+DEPTH_CY = 201.625
+REAL_CONE_WIDTH_M = 0.32
+COLOR_FX = 453.72
+
+CAM_ON_ROBOT_X_M = 0.2
+CAM_ON_ROBOT_Y_M = 0.0
 
 
 @dataclass(frozen=True)
@@ -70,14 +90,6 @@ class Rect:
 
     def inflate(self, dx: int, dy: int) -> "Rect":
         return Rect(self.x - dx, self.y - dy, self.w + 2 * dx, self.h + 2 * dy)
-
-    def overlaps(self, other: "Rect") -> bool:
-        return not (
-            self.right <= other.left
-            or other.right <= self.left
-            or self.top <= other.bottom
-            or other.top <= self.bottom
-        )
 
     def contains_point(self, point: Point) -> bool:
         px, py = point
@@ -265,14 +277,6 @@ def astar_min_turns(
     return reconstruct_state_path(came_from, best_goal_state)
 
 
-def neighbours_4(point: GridPoint) -> Iterable[GridPoint]:
-    x, y = point
-    yield (x + 1, y)
-    yield (x - 1, y)
-    yield (x, y + 1)
-    yield (x, y - 1)
-
-
 def neighbours_4_with_direction(point: GridPoint) -> Iterable[Tuple[GridPoint, GridPoint]]:
     x, y = point
     yield (x + 1, y), (1, 0)
@@ -283,15 +287,6 @@ def neighbours_4_with_direction(point: GridPoint) -> Iterable[Tuple[GridPoint, G
 
 def manhattan(a: GridPoint, b: GridPoint) -> int:
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
-
-
-def reconstruct_path(came_from: Dict[GridPoint, GridPoint], current: GridPoint) -> List[GridPoint]:
-    path = [current]
-    while current in came_from:
-        current = came_from[current]
-        path.append(current)
-    path.reverse()
-    return path
 
 
 def reconstruct_state_path(
@@ -342,11 +337,6 @@ class CanvasMapper:
         py = self.margin + int(round((y - self.min_y) * self.scale))
         return px, py
 
-    def to_mm(self, px: int, py: int) -> Point:
-        x = int(round((px - self.margin) / self.scale + self.min_x))
-        y = int(round((py - self.margin) / self.scale + self.min_y))
-        return x, y
-
     def rect_to_px(self, rect: Rect) -> Tuple[int, int, int, int]:
         x1, y1 = self.to_px((rect.left, rect.bottom))
         x2, y2 = self.to_px((rect.right, rect.top))
@@ -359,7 +349,6 @@ def draw_scene(
     result: Optional[PlanResult],
     mapper: CanvasMapper,
     message: str = "",
-    preview_cone: Optional[Rect] = None,
 ) -> "object":
     import cv2
     import numpy as np
@@ -378,13 +367,6 @@ def draw_scene(
         cx, cy = mapper.to_px(cone.center)
         cv2.putText(img, "cone{}".format(index), (cx - 26, cy + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (20, 20, 20), 1)
 
-    if preview_cone is not None:
-        preview_keepout = planner.cone_keepout_rect(preview_cone)
-        draw_rect(img, mapper, preview_keepout, (235, 240, 255), (120, 140, 220), thickness=1)
-        draw_rect(img, mapper, preview_cone, (80, 190, 255), (0, 100, 180), thickness=2)
-        cx, cy = mapper.to_px(preview_cone.center)
-        cv2.circle(img, (cx, cy), 3, (0, 0, 180), -1)
-
     if result is not None:
         draw_polyline(img, mapper, result.path_mm, (216, 102, 11), 5)
         start_robot = robot_rect_at(result.start_mm, planner.robot)
@@ -399,7 +381,7 @@ def draw_scene(
     cv2.putText(img, "start", (sx - 25, sy - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (35, 120, 45), 1)
     cv2.putText(img, "finish", (fx - 28, fy - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (45, 60, 180), 1)
 
-    cv2.putText(img, "left click: cone center   r: reset   s: save svg   q/esc: quit", (18, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (40, 40, 40), 1)
+    cv2.putText(img, "Task1 path plan, unit: mm   q/esc: close", (18, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (40, 40, 40), 1)
     if message:
         cv2.putText(img, message, (18, mapper.height - 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (20, 20, 180), 2)
     return img
@@ -463,75 +445,207 @@ def robot_rect_at(center: Point, robot: Rect) -> Rect:
     return Rect(cx - robot.w // 2, cy - robot.h // 2, robot.w, robot.h)
 
 
-def run_interactive(planner: CorridorPlanner, out_path: Path) -> None:
+def scale_box(box: Tuple[int, int, int, int], src_size: Point, dst_size: Point) -> Tuple[int, int, int, int]:
+    x1, y1, x2, y2 = box
+    src_w, src_h = src_size
+    dst_w, dst_h = dst_size
+    dx1 = clamp(int(round(x1 * dst_w / float(src_w))), 0, dst_w - 1)
+    dx2 = clamp(int(round(x2 * dst_w / float(src_w))), 0, dst_w - 1)
+    dy1 = clamp(int(round(y1 * dst_h / float(src_h))), 0, dst_h - 1)
+    dy2 = clamp(int(round(y2 * dst_h / float(src_h))), 0, dst_h - 1)
+    return dx1, dy1, dx2, dy2
+
+
+def yolo_to_original(box: Sequence[float], img_w: int, img_h: int, input_size: int = 640) -> Tuple[int, int, int, int]:
+    cx, cy, w, h = box
+    scale = min(input_size / img_w, input_size / img_h)
+    new_w = img_w * scale
+    new_h = img_h * scale
+    pad_x = (input_size - new_w) / 2
+    pad_y = (input_size - new_h) / 2
+    cx = (cx - pad_x) / scale
+    cy = (cy - pad_y) / scale
+    w = w / scale
+    h = h / scale
+    x1 = clamp(int(cx - w / 2), 0, img_w - 1)
+    x2 = clamp(int(cx + w / 2), 0, img_w - 1)
+    y1 = clamp(int(cy - h / 2), 0, img_h - 1)
+    y2 = clamp(int(cy + h / 2), 0, img_h - 1)
+    return x1, y1, x2, y2
+
+
+def pixel_to_camera_3d(u: int, v: int, depth_mm: int) -> Tuple[float, float, float]:
+    z = depth_mm / 1000.0
+    x = (u - DEPTH_CX) * z / DEPTH_FX
+    y = (v - DEPTH_CY) * z / DEPTH_FY
+    return x, y, z
+
+
+def get_cone_depth_roi(color_box: Tuple[int, int, int, int], color_size: Point, depth_size: Point) -> Optional[Tuple[int, int, int, int]]:
+    dx1, dy1, dx2, dy2 = scale_box(color_box, color_size, depth_size)
+    h = dy2 - dy1
+    w = dx2 - dx1
+    if h <= 0 or w <= 0:
+        return None
+
+    target_h = max(5, h // 4)
+    roi_y2 = dy2
+    roi_y1 = max(0, dy2 - target_h)
+    if roi_y2 - roi_y1 < 5:
+        roi_y1 = dy1
+        roi_y2 = min(depth_size[1], dy1 + target_h)
+
+    target_w = max(5, w // 2)
+    center_x = (dx1 + dx2) // 2
+    roi_x1 = max(0, center_x - target_w // 2)
+    roi_x2 = min(depth_size[0], roi_x1 + target_w)
+    if roi_x2 - roi_x1 < 5:
+        roi_x1, roi_x2 = dx1, dx2
+
+    return roi_x1, roi_y1, roi_x2, roi_y2
+
+
+def load_detector():
+    libs_dir = PROJECT_DIR / "libs"
+    if not libs_dir.exists():
+        libs_dir = Path("/home/ysc/Desktop/2026Project/libs")
+
+    engine_path = libs_dir / "bigdog_0427.engine"
+    sys.path.append(str(libs_dir))
+    ctypes.CDLL(str(libs_dir / "libmyplugins.so"))
+    import yolov5_trt_cpp
+
+    print("[TRT] loading engine...")
+    detector = yolov5_trt_cpp.Yolov5TRT(str(engine_path))
+    print("[TRT] engine loaded")
+    return detector
+
+
+def detect_cone_y_mm(expected_count: int = 2) -> List[int]:
+    import numpy as np
+    import orbbec_native
+
+    detector = load_detector()
+    cam = orbbec_native.OrbbecCamera()
+    cam.start()
+    try:
+        time.sleep(1.0)
+        depth_w, depth_h = cam.get_depth_size()
+        color_w, color_h = cam.get_color_size()
+        print("[Orbbec] color {}x{}, depth {}x{}".format(color_w, color_h, depth_w, depth_h))
+
+        depth_history = defaultdict(lambda: deque(maxlen=DEPTH_HISTORY_LEN))
+        position_estimates: Dict[int, Tuple[float, float]] = {}
+        last_centers: Dict[int, Point] = {}
+
+        print("[Detect] collecting {} frames, keep the robot still...".format(DETECTION_FRAMES))
+        for frame_idx in range(DETECTION_FRAMES):
+            color_frame = cam.get_color_frame()
+            if color_frame is None:
+                time.sleep(0.01)
+                continue
+            frame = np.asarray(color_frame, dtype=np.uint8).copy()
+
+            for det in detector.detect(frame):
+                cx_y, cy_y, w_y, h_y, conf, cls_id = det
+                if conf < CONF_THRESH or int(cls_id) != TARGET_CLASS:
+                    continue
+
+                color_box = yolo_to_original((cx_y, cy_y, w_y, h_y), color_w, color_h)
+                box_center = ((color_box[0] + color_box[2]) // 2, (color_box[1] + color_box[3]) // 2)
+                tid = None
+                for existing_tid, last_center in last_centers.items():
+                    if abs(box_center[0] - last_center[0]) < 50 and abs(box_center[1] - last_center[1]) < 50:
+                        tid = existing_tid
+                        break
+                if tid is None:
+                    tid = len(last_centers)
+                last_centers[tid] = box_center
+
+                depth_roi = get_cone_depth_roi(color_box, (color_w, color_h), (depth_w, depth_h))
+                if depth_roi is None:
+                    continue
+
+                raw_depth, valid_cnt = cam.get_depth_in_box(*depth_roi)
+                x1, _, x2, _ = color_box
+                box_w = x2 - x1
+                visual_z = (REAL_CONE_WIDTH_M * COLOR_FX) / max(box_w, 1) if box_w > 0 else 5.0
+
+                u = (depth_roi[0] + depth_roi[2]) // 2
+                v = depth_roi[3] - 1
+                if raw_depth > 0 and valid_cnt >= MIN_VALID_DEPTH_COUNT:
+                    depth_history[tid].append(raw_depth)
+                    x_cam, _, z_cam = pixel_to_camera_3d(u, v, int(np.median(depth_history[tid])))
+                else:
+                    if visual_z <= 0:
+                        continue
+                    x_cam = (u - DEPTH_CX) * visual_z / DEPTH_FX
+                    z_cam = visual_z
+
+                alpha = 0.5
+                if tid in position_estimates:
+                    prev_x, prev_z = position_estimates[tid]
+                    position_estimates[tid] = (alpha * x_cam + (1 - alpha) * prev_x, alpha * z_cam + (1 - alpha) * prev_z)
+                else:
+                    position_estimates[tid] = (x_cam, z_cam)
+
+            print("\r[Detect] frame {}/{} ids={}".format(frame_idx + 1, DETECTION_FRAMES, list(position_estimates.keys())), end="")
+            time.sleep(0.05)
+        print()
+    finally:
+        cam.stop()
+
+    if len(position_estimates) < expected_count:
+        raise RuntimeError("detected {} cones, expected {}".format(len(position_estimates), expected_count))
+
+    y_values = []
+    for tid, (x_cam, z_cam) in position_estimates.items():
+        plan_y = TASK1_START_MM[1] + int(round((CAM_ON_ROBOT_Y_M + x_cam) * 1000))
+        plan_x_from_camera = TASK1_START_MM[0] + int(round((CAM_ON_ROBOT_X_M + z_cam) * 1000))
+        print("camera cone{}: x_from_camera={} y={} mm".format(tid, plan_x_from_camera, plan_y))
+        y_values.append(plan_y)
+
+    return sorted(y_values)[:expected_count]
+
+
+def input_int_mm(prompt: str) -> int:
+    while True:
+        value = input(prompt).strip()
+        try:
+            return int(round(float(value)))
+        except ValueError:
+            print("please input a number, unit: mm")
+
+
+def show_plan_result(planner: CorridorPlanner, result: PlanResult) -> None:
     import cv2
 
-    window_name = "task1_path_planner"
     mapper = CanvasMapper(planner)
-    cones: List[Rect] = []
-    result: Optional[PlanResult] = None
-    preview_cone: Optional[Rect] = None
-    message = "click cone1 center"
-
-    def refresh() -> None:
-        cv2.imshow(window_name, draw_scene(planner, cones, result, mapper, message, preview_cone))
-
-    def mouse_callback(event: int, x: int, y: int, flags: int, userdata: object) -> None:
-        nonlocal result, message, preview_cone
-        if event == cv2.EVENT_MOUSEMOVE:
-            if len(cones) < 2:
-                preview_cone = planner.cone_from_center(mapper.to_mm(x, y))
-                refresh()
-            return
-        if event != cv2.EVENT_LBUTTONDOWN:
-            return
-        if len(cones) >= 2:
-            preview_cone = None
-            message = "already have two cones, press r to reset"
-            refresh()
-            return
-
-        center = planner.clamp_cone_center(mapper.to_mm(x, y))
-        cone = planner.cone_from_center(center)
-        cones.append(cone)
-        preview_cone = None
-        if len(cones) == 1:
-            message = "click cone2 center"
-        else:
-            try:
-                result = planner.plan_with_cones(cones)
-                message = "path ready, press s to save"
-                print_plan(result)
-            except RuntimeError:
-                result = None
-                message = "no path, press r and choose again"
-        refresh()
-
-    cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
-    cv2.setMouseCallback(window_name, mouse_callback)
-    refresh()
-
+    message = "saved {}".format(result.svg_path.resolve() if result.svg_path else "")
+    cv2.imshow("task1_path_planner", draw_scene(planner, result.cones_mm, result, mapper, message))
     while True:
         key = cv2.waitKey(30) & 0xFF
         if key in (27, ord("q")):
             break
-        if key == ord("r"):
-            cones = []
-            result = None
-            preview_cone = None
-            message = "click cone1 center"
-            refresh()
-        elif key == ord("s"):
-            if result is None:
-                message = "no path to save"
-            else:
-                saved_svg_path = write_plan_files(result, out_path)
-                result.svg_path = saved_svg_path
-                message = "saved {}".format(saved_svg_path.resolve())
-                print_plan(result)
-            refresh()
+    cv2.destroyWindow("task1_path_planner")
 
-    cv2.destroyWindow(window_name)
+
+def run_distance_input(planner: CorridorPlanner, out_path: Path) -> None:
+    x_values = [input_int_mm("{} cone x mm: ".format(name)) for name in ("left", "right")]
+
+    y_values = detect_cone_y_mm(expected_count=2)
+    for name, y in zip(("left", "right"), y_values):
+        print("{} cone y = {} mm".format(name, y))
+
+    cones: List[Rect] = []
+    for x, y in zip(x_values, y_values):
+        cones.append(planner.cone_from_center((x, y)))
+
+    result = planner.plan_with_cones(cones)
+    saved_svg_path = write_plan_files(result, out_path)
+    result.svg_path = saved_svg_path
+    print_plan(result)
+    show_plan_result(planner, result)
 
 
 def write_svg(result: PlanResult, output_path: Path) -> None:
@@ -567,8 +681,6 @@ def write_svg(result: PlanResult, output_path: Path) -> None:
         color = "#b8b8b8" if y % 500 == 0 else "#e4e4e4"
         grid_lines.append('<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="{}" stroke-width="1" />'.format(p1[0], p1[1], p2[0], p2[1], color))
 
-    robot_half_l = result.robot_mm.w // 2
-    robot_half_w = result.robot_mm.h // 2
     inflated = [cone.inflate(result.clearance_mm, result.clearance_mm) for cone in result.cones_mm]
     path_points = " ".join("{},{}".format(*mapper.to_px(point)) for point in result.path_mm)
     start_robot = robot_rect_at(result.start_mm, result.robot_mm)
@@ -705,34 +817,9 @@ def clamp(value: int, low: int, high: int) -> int:
     return max(low, min(high, value))
 
 
-def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Interactive cone path planner and SVG visualizer.")
-    parser.add_argument("--cone1", type=int, nargs=2, metavar=("X", "Y"), help="cone 1 center position in mm")
-    parser.add_argument("--cone2", type=int, nargs=2, metavar=("X", "Y"), help="cone 2 center position in mm")
-    parser.add_argument("--out", type=Path, default=DEFAULT_PLAN_SVG_PATH, help="SVG output path")
-    parser.add_argument("--grid", type=int, default=50, help="planner grid step in millimetres")
-    parser.add_argument(
-        "--clearance",
-        type=int,
-        default=200,
-        help="extra cone clearance in millimetres; keepout side = cone side + 2 * clearance",
-    )
-    return parser
-
-
 def main() -> None:
-    args = build_arg_parser().parse_args()
-    planner = CorridorPlanner(grid_step_mm=args.grid, clearance_mm=args.clearance)
-
-    if args.cone1 is not None and args.cone2 is not None:
-        cones = [planner.cone_from_center(tuple(args.cone1)), planner.cone_from_center(tuple(args.cone2))]
-        result = planner.plan_with_cones(cones)
-        saved_svg_path = write_plan_files(result, args.out)
-        result.svg_path = saved_svg_path
-        print_plan(result)
-        return
-
-    run_interactive(planner, args.out)
+    planner = CorridorPlanner()
+    run_distance_input(planner, DEFAULT_PLAN_SVG_PATH)
 
 
 if __name__ == "__main__":

@@ -47,7 +47,8 @@ def main():
         print("[Main] start task1")
         task1.run(dog)
         time.sleep(2)
-        dog.move(last_time=0.18, vz=10000)
+        # 换了个足端感觉没有变斜情况了
+        # dog.move(last_time=0.18, vz=10000)
 
         print("[Main] start task2")
         try:
