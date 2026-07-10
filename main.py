@@ -37,6 +37,10 @@ def main():
         dog.close_continue()
         dog.stop()
 
+        # 单独运行任务三的时候解注释
+        # status_by_letter = dict(DEFAULT_DASHBOARD_STATUS)
+        # print(f"[Main] task3-only status={status_by_letter}")
+
         start_yaw_deg = task2_3.read_current_yaw_deg()
         print("[Main] start_yaw_deg={:.3f}".format(start_yaw_deg))
 

@@ -77,12 +77,32 @@ def transform_point(T, point):
     return (np.asarray(T, dtype=np.float64) @ hp)[:3]
 
 
-def wait_for_frame(camera):
-    while True:
+def wait_for_grasp_result(camera, config, max_attempts=60, retry_delay_s=0.05):
+    """Wait for a color frame whose matching depth data is ready."""
+    last_error = None
+    for attempt in range(1, int(max_attempts) + 1):
         frame = get_color_frame(camera)
-        if frame is not None:
-            return frame
-        time.sleep(0.02)
+        if frame is None:
+            last_error = RuntimeError("Color frame is not ready")
+        else:
+            try:
+                return frame, compute_grasp(camera, frame, config)
+            except RuntimeError as exc:
+                message = str(exc)
+                if not (
+                    message.startswith("Green block not detected")
+                    or message.startswith("No valid depth in block box")
+                ):
+                    raise
+                last_error = exc
+
+        if attempt == 1 or attempt % 10 == 0:
+            print(f"[Wait] grasp frame {attempt}/{max_attempts} not ready: {last_error}")
+        time.sleep(float(retry_delay_s))
+
+    raise RuntimeError(
+        f"No usable color/depth frame after {max_attempts} attempts; last error: {last_error}"
+    )
 
 
 def detect_green_block(frame_bgr, block_cfg):
@@ -266,6 +286,8 @@ def parse_args():
     parser.add_argument("--dry-run", action="store_true", help="Print target angles/positions without moving servos.")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--show", action="store_true")
+    parser.add_argument("--max-attempts", type=int, default=60, help="Maximum color/depth frame attempts.")
+    parser.add_argument("--retry-delay", type=float, default=0.05, help="Delay between frame attempts in seconds.")
     return parser.parse_args()
 
 
@@ -278,8 +300,12 @@ def main():
     try:
         print(f"[Orbbec] color size: {camera.get_color_size()}")
         print(f"[Orbbec] depth size : {camera.get_depth_size()}")
-        frame = wait_for_frame(camera)
-        result = compute_grasp(camera, frame, config)
+        frame, result = wait_for_grasp_result(
+            camera,
+            config,
+            max_attempts=args.max_attempts,
+            retry_delay_s=args.retry_delay,
+        )
         print_result(result)
         if args.show:
             draw_block(frame, result["detection"], result)

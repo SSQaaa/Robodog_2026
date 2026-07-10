@@ -295,6 +295,15 @@ python Arm/vision_grasp.py --execute --show
 
 不要同时使用 `--dry-run` 和 `--execute`，程序会直接报错。
 
+脚本默认会重新获取并检测最多 60 帧，以等待彩色流和深度流同时就绪。可按相机启动速度调整：
+
+```bash
+python Arm/vision_grasp.py --dry-run --max-attempts 100 --retry-delay 0.05
+```
+
+- `--max-attempts`：最大取帧/深度查询次数，默认 60
+- `--retry-delay`：每次重试间隔秒数，默认 0.05
+
 ### 6.3 常见抓取调整项
 
 抓取发生固定偏移时，优先按以下顺序排查：
@@ -482,4 +491,3 @@ python Arm/calibration.py --samples 60 --save
 - [ ] 低速真实抓取测试通过
 - [ ] Task1、Task2、Task2_3、Task3 分阶段测试通过
 - [ ] 最后再执行 `python main.py`
-

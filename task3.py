@@ -33,14 +33,16 @@ GRASP2_MISSING_RECENTER_COUNT = 5
 FORWARD_SECONDS = 2.5
 CENTER_TOLERANCE_BOX_PX = 30  # 中心值+-30px就认为ABCD在画面中心
 MAX_ALIGN_SECONDS = 60.0
-BOX_LOST_NEAR_DEPTH_MM = 270.0
+BOX_LOST_NEAR_DEPTH_MM = 300.0
 BOX_SEENED_DEPTH_MM = 1000.0
 
-BACK_OFFSET_TIME = 4.0
+BACK_OFFSET_TIME = 6.0
 
-RETURN_FORWARD_SECONDS = 4.5
+RETURN_FORWARD_SECONDS = 3.0
 
 SIDE_MOVE_SECONDS = 1.0
+
+BOX_LETTER_ORDER = ("A", "B", "C", "D")
 
 
 class Task3:
@@ -102,8 +104,11 @@ class Task3:
         time.sleep(0.5)
         self.approach_box_2(letter)
         time.sleep(0.5)
+        # 到达30cm后再往前冲刺一咪咪
+        self.dog.move(vx=10000, last_time=0.25, duration=0.3)
         self.arm.place_block()
         time.sleep(0.5)
+        self.dog.move(vx=-15000, last_time=1, duration=0.3)
 
         if not should_return:
             return
@@ -132,6 +137,46 @@ class Task3:
         return frame, [det for det in detections if det.class_name == class_name]
 
     def refind_target(self, class_name, back_time=0.3):
+        # 如果画面中有ABCD就直接左右移动
+        if class_name in BOX_LETTER_ORDER:
+            frame, detections = self.vision.detect()
+            if frame is None:
+                detections = []
+            matches = [det for det in detections if det.class_name == class_name]
+            if matches:
+                print(f"[Recover] {class_name} found without stopping")
+                return frame, matches
+
+            visible_letters = [
+                det for det in detections if det.class_name in BOX_LETTER_ORDER
+            ]
+            if visible_letters:
+                self.move_toward_box_letter(class_name, visible_letters)
+                return frame, []
+
+            # 如果没有ABCD就先站定再识别，防止因为抖动导致的识别失败
+            self.dog.stop()
+            time.sleep(0.5)
+            frame, detections = self.vision.detect()
+            if frame is None:
+                detections = []
+            matches = [det for det in detections if det.class_name == class_name]
+            if matches:
+                print(f"[Recover] {class_name} found after stand still")
+                return frame, matches
+
+            visible_letters = [
+                det for det in detections if det.class_name in BOX_LETTER_ORDER
+            ]
+            if visible_letters:
+                self.move_toward_box_letter(class_name, visible_letters)
+                return frame, []
+
+            print(f"[Recover] {class_name} and no box letter found, move backward")
+            self.dog.move(vx=BACKWARD_SPEED, last_time=back_time, duration=0.3)
+            time.sleep(0.5)
+            return frame, []
+
         self.dog.stop()
         time.sleep(0.5)
         frame, matches = self.detect_matches(class_name)
@@ -143,8 +188,25 @@ class Task3:
         time.sleep(0.5)
         return frame, []
 
+    def move_toward_box_letter(self, target, visible_letters):
+        visible_letters.sort(key=lambda det: (det.area, det.conf), reverse=True)
+        current = visible_letters[0].class_name
+        target_index = BOX_LETTER_ORDER.index(target)
+        current_index = BOX_LETTER_ORDER.index(current)
+
+        # Boxes are arranged A, B, C, D from left to right.
+        if current_index > target_index:
+            vy = -SIDE_SPEED
+            direction = "left"
+        else:
+            vy = SIDE_SPEED
+            direction = "right"
+
+        print(f"[Recover] target={target}, visible={current}; move {direction}")
+        self.dog.move(vy=vy, last_time=SIDE_MOVE_SECONDS, duration=0.3)
+
     def x_move_by_depth(self, depth_mm):
-        if depth_mm is not None and float(depth_mm) < 400.0:
+        if depth_mm is not None and float(depth_mm) < 300.0:
             return 7000, 0.1
         return 10000, 0.3
     

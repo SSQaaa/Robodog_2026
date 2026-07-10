@@ -15,6 +15,7 @@
 
 import time
 
+from tools.audio_announce import announce_dashboard
 from tools.vision import DashboardInfer, analyze_infer_output
 # from tasks.task2_3 import rotate_to_relative_yaw
 
@@ -317,6 +318,7 @@ def _run_single_dashboard_with_detector(
         max_frames=40,
     )
     print("D{} 字母读取完成：{}".format(dashboard_index, final_letter))
+    announce_dashboard(final_letter, final_dashboard_state)
 
     record = {
         "dashboard_index": dashboard_index,
