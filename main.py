@@ -11,6 +11,9 @@ from tools.motion import DogControl
 from tools.vision import resolve_dashboard_status
 
 
+SHOW_TASK2_STREAM = True
+
+
 def get_task3_status(records):
     if not records:
         print("[Main] task2 did not return records, use default task3 status")
@@ -52,7 +55,7 @@ def main():
 
         print("[Main] start task2")
         try:
-            records = task2.run(dog)
+            records = task2.run(dog, show_stream=SHOW_TASK2_STREAM)
         except Exception:
             print("[Main] task2 failed, use default task3 status")
             traceback.print_exc()

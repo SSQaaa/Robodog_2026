@@ -1,10 +1,30 @@
 # -*- coding: utf-8 -*-
+import queue
 import subprocess
+import threading
 from pathlib import Path
 
 
 AUDIO_DIR = Path(__file__).resolve().parent.parent / "wav"
 APLAY_CMD = ["aplay", "-D", "plughw:2,0", "-c", "2", "-q"]
+_AUDIO_QUEUE = queue.Queue()
+
+
+def _audio_worker():
+    while True:
+        files = _AUDIO_QUEUE.get()
+        try:
+            result = subprocess.run(APLAY_CMD + [str(path) for path in files], check=False)
+            if result.returncode != 0:
+                print("[Audio] aplay failed, returncode={}".format(result.returncode))
+        except FileNotFoundError:
+            print("[Audio] aplay not found, skip announcement")
+        finally:
+            _AUDIO_QUEUE.task_done()
+
+
+_AUDIO_THREAD = threading.Thread(target=_audio_worker, name="audio-announcer", daemon=True)
+_AUDIO_THREAD.start()
 
 
 def announce_dashboard(letter, state):
@@ -23,7 +43,4 @@ def announce_dashboard(letter, state):
         AUDIO_DIR / (status + ".wav"),
     ]
     print("[Audio] {}区域仪表盘显示{}，{}".format(letter, state, status))
-    try:
-        subprocess.run(APLAY_CMD + [str(path) for path in files], check=False)
-    except FileNotFoundError:
-        print("[Audio] aplay not found, skip announcement")
+    _AUDIO_QUEUE.put(files)
