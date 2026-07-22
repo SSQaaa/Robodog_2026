@@ -61,7 +61,7 @@ CAM_ON_ROBOT_X_M = 0.2
 CAM_ON_ROBOT_Y_M = 0.0
 
 # 锥桶四周的默认安全距离，单位：毫米。
-CONE_CLEARANCE_MM = 150
+CONE_CLEARANCE_MM = 100
 
 
 @dataclass(frozen=True)
