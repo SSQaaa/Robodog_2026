@@ -49,6 +49,8 @@ def main():
 
         print("[Main] start task1")
         task1.run(dog)
+        print("[Main] task1 finished, check yaw once")
+        task2_3.rotate_to_relative_yaw_once(dog, start_yaw_deg - 90.0)
         time.sleep(2)
         # 换了个足端感觉没有变斜情况了
         # dog.move(last_time=0.18, vz=10000)

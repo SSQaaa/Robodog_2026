@@ -189,11 +189,11 @@ def _run_single_dashboard_with_detector(
             letter_state = "ALIGN"
             letter_align_adjust_count = 0
             letter_distance_adjust_count = 0
-            time.sleep(1.5)
+            time.sleep(0.1)
 
             if letter_missing_count >= 3:
                 print("D{} LETTER_PRECHECK: 连续3次未识别到字母，后退一点".format(dashboard_index))
-                dog.move(last_time=0.10, vx=-7000)
+                dog.move(last_time=0.30, vx=-7000)
                 letter_missing_count = 0
                 time.sleep(0.5)
             continue

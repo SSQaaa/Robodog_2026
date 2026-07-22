@@ -121,6 +121,32 @@ def rotate_to_relative_yaw(dog, target_yaw_deg, tolerance_deg=3.0):
     return read_current_yaw_deg()
 
 
+def rotate_to_relative_yaw_once(dog, target_yaw_deg, tolerance_deg=3.0):
+    """Check yaw once and issue at most one correction command."""
+    yaw_vz_small = 9555
+    yaw_vz_large = 10000
+
+    current_yaw = read_current_yaw_deg()
+    error = _normalize_yaw_error(target_yaw_deg, current_yaw)
+    if abs(error) <= tolerance_deg:
+        print(
+            "YAW_ONCE: within tolerance current={:.3f} target={:.3f} error={:.3f}".format(
+                current_yaw, target_yaw_deg, error
+            )
+        )
+        return current_yaw
+
+    vz_abs = yaw_vz_large if abs(error) > 30.0 else yaw_vz_small
+    vz_cmd = -vz_abs if error > 0 else vz_abs
+    print(
+        "YAW_ONCE: correct once current={:.3f} target={:.3f} error={:.3f} vz={}".format(
+            current_yaw, target_yaw_deg, error, vz_cmd
+        )
+    )
+    dog.move(last_time=0.1, vz=vz_cmd)
+    return current_yaw
+
+
 def _adjust_c_distance(dog, detector, target_m, tolerance_m, stable_need_frames, max_adjust_steps):
     stable_count = 0
 
