@@ -359,7 +359,7 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         dog.move(last_time=7, vx=20000)
         time.sleep(0.5)
-        dog.move(last_time=5, vy=25000)
+        dog.move(last_time=4, vy=25000)
         time.sleep(0.5)
 
         # ----------------------------
