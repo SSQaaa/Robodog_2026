@@ -167,10 +167,22 @@ def drive_axis_segment(dog: DogControl, axis, distance_m):
         command = int(command_sign * LATERAL_COMMAND_SIGN * LATERAL_VY)
         last_time = abs(distance_m) / speed_mps
         print("[Task1][Move] y distance={:.3f}m vy={} time={:.2f}s".format(distance_m, command, last_time))
-        dog.move(vy=command, last_time=last_time, duration=MOVE_SETTLE_S)
-        # time.sleep(0.5)
-        dog.move(last_time=0.12*last_time, vx=10000)
-        print("[Task1][Move] y correction 10000 0.12")
+        one_second_steps = max(int(last_time) - 1, 0)
+        lateral_steps = [1.0] * one_second_steps
+        lateral_steps.append(last_time - one_second_steps)
+
+        for step_index, step_time in enumerate(lateral_steps, start=1):
+            dog.move(vy=command, last_time=step_time, duration=MOVE_SETTLE_S)
+            dog.move(last_time=0.12, vx=10000)
+            print(
+                "[Task1][Move] y step={}/{} vy={} time={:.2f}s, "
+                "forward correction vx=10000 time=0.12s".format(
+                    step_index,
+                    len(lateral_steps),
+                    command,
+                    step_time,
+                )
+            )
         return
 
     raise ValueError("unsupported axis: {}".format(axis))
