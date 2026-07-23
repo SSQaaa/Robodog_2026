@@ -193,7 +193,7 @@ def _run_single_dashboard_with_detector(
 
             if letter_missing_count >= 3:
                 print("D{} LETTER_PRECHECK: 连续3次未识别到字母，后退一点".format(dashboard_index))
-                dog.move(last_time=0.30, vx=-7000)
+                dog.move(last_time=0.10, vx=-8000)
                 letter_missing_count = 0
                 time.sleep(0.5)
             continue
@@ -359,7 +359,7 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         dog.move(last_time=7, vx=20000)
         time.sleep(0.5)
-        dog.move(last_time=4, vy=25000)
+        dog.move(last_time=5, vy=25000)
         time.sleep(0.5)
 
         # ----------------------------
@@ -486,7 +486,7 @@ def task2_new(dog, detector, show_stream=False):
         # 换了个足端感觉没有变斜情况了
         # dog.move(last_time=0.18, vz=10000)
         time.sleep(0.5)
-        dog.move(last_time=5, vx=20000)
+        dog.move(last_time=5.5, vx=20000)
         time.sleep(0.5)
         dog.revolve_90_l()
         time.sleep(0.5)

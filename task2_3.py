@@ -238,11 +238,11 @@ def task2_3(dog, detector, start_yaw_deg):
             c_missing_count += 1
             print("[Task2_3] step={} C not detected, wait {}/3".format(step + 1, c_missing_count))
             stable_count = 0
-            time.sleep(1.5)
+            time.sleep(0.1)
 
             if c_missing_count >= 3:
                 print("[Task2_3] C not detected 3 times, move back a little")
-                dog.move(last_time=0.10, vx=-7000)
+                dog.move(last_time=0.10, vx=-8000)
                 c_missing_count = 0
                 time.sleep(0.5)
             continue

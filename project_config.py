@@ -37,10 +37,10 @@ STATUS_CN_TO_TASK3 = {
 UNKNOWN_STATE_CN = "未知"
 
 DEFAULT_DASHBOARD_STATUS = {
-    "A": "NORMAL",
+    "A": "ABNORMAL",
     "B": "ABNORMAL",
     "C": "NORMAL",
-    "D": "ABNORMAL",
+    "D": "NORMAL",
 }
 
 DOG_IP = "192.168.1.120"

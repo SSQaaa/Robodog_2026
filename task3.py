@@ -28,7 +28,7 @@ PRE_GRASP_MOVE_SECONDS_X = 0.1   # 抓物块时候狗往前/后移动的时间�
 PRE_GRASP_MOVE_SECONDS_Y = 0.3   # 抓物块时候狗往左/右移动的时间，调整物块在画面中的位置
 PRE_GRASP_MAX_ADJUST_SECONDS = 30.0  # 抓取前最大调整时间，超过这个时间就放弃抓取，重新开始流程。因为如果调整时间过长可能是识别有问题或者位置太偏了，继续调整可能也很难成功。
 GRASP_R_LIMIT_MM = 395.0
-GRASP2_MISSING_RECENTER_COUNT = 5
+BLOCK_MISSING_REFIND_COUNT = 5
 
 FORWARD_SECONDS = 2.5
 CENTER_TOLERANCE_BOX_PX = 30  # 中心值+-30px就认为ABCD在画面中心
@@ -139,54 +139,55 @@ class Task3:
             return None, []
         return frame, [det for det in detections if det.class_name == class_name]
 
-    def refind_target(self, class_name, back_time=0.3):
+    def refind_box_letter(self, class_name, back_time=0.3):
         # 如果画面中有ABCD就直接左右移动
-        if class_name in BOX_LETTER_ORDER:
-            frame, detections = self.vision.detect()
-            if frame is None:
-                detections = []
-            matches = [det for det in detections if det.class_name == class_name]
-            if matches:
-                print(f"[Recover] {class_name} found without stopping")
-                return frame, matches
+        frame, detections = self.vision.detect()
+        if frame is None:
+            detections = []
+        matches = [det for det in detections if det.class_name == class_name]
+        if matches:
+            print(f"[Recover] {class_name} found without stopping")
+            return frame, matches
 
-            visible_letters = [
-                det for det in detections if det.class_name in BOX_LETTER_ORDER
-            ]
-            if visible_letters:
-                self.move_toward_box_letter(class_name, visible_letters)
-                return frame, []
-
-            # 如果没有ABCD就先站定再识别，防止因为抖动导致的识别失败
-            self.dog.stop()
-            time.sleep(0.5)
-            frame, detections = self.vision.detect()
-            if frame is None:
-                detections = []
-            matches = [det for det in detections if det.class_name == class_name]
-            if matches:
-                print(f"[Recover] {class_name} found after stand still")
-                return frame, matches
-
-            visible_letters = [
-                det for det in detections if det.class_name in BOX_LETTER_ORDER
-            ]
-            if visible_letters:
-                self.move_toward_box_letter(class_name, visible_letters)
-                return frame, []
-
-            print(f"[Recover] {class_name} and no box letter found, move backward")
-            self.dog.move(vx=BACKWARD_SPEED, last_time=back_time, duration=0.3)
-            time.sleep(0.5)
+        visible_letters = [
+            det for det in detections if det.class_name in BOX_LETTER_ORDER
+        ]
+        if visible_letters:
+            self.move_toward_box_letter(class_name, visible_letters)
             return frame, []
 
+        # 如果没有ABCD就先站定再识别，防止因为抖动导致的识别失败
         self.dog.stop()
         time.sleep(0.5)
-        frame, matches = self.detect_matches(class_name)
+        frame, detections = self.vision.detect()
+        if frame is None:
+            detections = []
+        matches = [det for det in detections if det.class_name == class_name]
         if matches:
             print(f"[Recover] {class_name} found after stand still")
             return frame, matches
-        print(f"[Recover] {class_name} not found, move backward")
+
+        visible_letters = [
+            det for det in detections if det.class_name in BOX_LETTER_ORDER
+        ]
+        if visible_letters:
+            self.move_toward_box_letter(class_name, visible_letters)
+            return frame, []
+
+        print(f"[Recover] {class_name} and no box letter found, move backward")
+        self.dog.move(vx=BACKWARD_SPEED, last_time=back_time, duration=0.3)
+        time.sleep(0.5)
+        return frame, []
+
+    def refind_block(self, block_class, back_time=0.2):
+        self.dog.stop()
+        time.sleep(0.5)
+        frame, matches = self.detect_matches(block_class)
+        if matches:
+            print(f"[BlockRecover] {block_class} found after stand still")
+            return frame, matches
+
+        print(f"[BlockRecover] {block_class} not found, move backward")
         self.dog.move(vx=BACKWARD_SPEED, last_time=back_time, duration=0.3)
         time.sleep(0.5)
         return frame, []
@@ -232,11 +233,12 @@ class Task3:
             attempt += 1
             time.sleep(0.5)
         
-    # 先让目标字母进入画面中心，再固定直走到箱子前。
+    # 抓取前先让目标物块进入画面中心。
     def adjust_before_grasp_1(self, block_class):
         print(f"[GraspAdjust_1] align to {block_class}")
         deadline = time.time() + PRE_GRASP_MAX_ADJUST_SECONDS
         last_seen = None
+        missing_count = 0
 
         while time.time() < deadline:
             frame, matches = self.detect_matches(block_class)
@@ -244,10 +246,19 @@ class Task3:
                 continue
 
             if not matches:
-                frame, matches = self.refind_target(block_class, back_time=0.2)
-                if frame is None or not matches:
+                missing_count += 1
+                print(
+                    f"[GraspAdjust_1] {block_class} not found "
+                    f"{missing_count}/{BLOCK_MISSING_REFIND_COUNT}"
+                )
+                if missing_count >= BLOCK_MISSING_REFIND_COUNT:
+                    frame, matches = self.refind_block(block_class, back_time=0.2)
+                    missing_count = 0
+                time.sleep(0.1)
+                if not matches:
                     continue
 
+            missing_count = 0
             _, frame_w = frame.shape[:2]
             matches.sort(key=lambda det: abs(det.center[0] - frame_w / 2))
             block = matches[0]
@@ -282,8 +293,8 @@ class Task3:
             if not matches:
                 missing_count += 1
                 print(f"[GraspAdjust_2] {block_class} not found")
-                if missing_count >= GRASP2_MISSING_RECENTER_COUNT:
-                    frame, matches = self.refind_target(block_class, back_time=0.2)
+                if missing_count >= BLOCK_MISSING_REFIND_COUNT:
+                    frame, matches = self.refind_block(block_class, back_time=0.3)
                     if frame is None or not matches:
                         raise RuntimeError(f"{block_class} lost during grasp adjust 2; rerun coarse alignment")
                     missing_count = 0
@@ -344,7 +355,7 @@ class Task3:
                 continue
 
             if not matches:
-                frame, matches = self.refind_target(letter)
+                frame, matches = self.refind_box_letter(letter)
                 if frame is None or not matches:
                     continue
 
@@ -402,7 +413,7 @@ class Task3:
 
                 print(f"[Box] {letter} not found after 3 attempts")
                 target_none_count = 0
-                frame, matches = self.refind_target(letter)
+                frame, matches = self.refind_box_letter(letter)
                 if frame is None or not matches:
                     continue
             
