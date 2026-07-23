@@ -264,7 +264,7 @@ def _run_single_dashboard_with_detector(
                 break
 
             if abs(letter_error_m) > 0.20:
-                letter_vx_abs = 8000
+                letter_vx_abs = 10000
             elif abs(letter_error_m) > 0.10:
                 letter_vx_abs = 7500
             else:
