@@ -66,6 +66,20 @@ def _has_ssi_detection(infer_output):
     return False
 
 
+def _move_right_until_letter(dog, detector, max_move_seconds=5.0):
+    moved_seconds = 0.0
+    while moved_seconds + 1e-9 < max_move_seconds:
+        if _pick_best_letter_detection(detector.infer_once()) is not None:
+            print("检测到字母，停止右移")
+            break
+        step_seconds = min(0.1, max_move_seconds - moved_seconds)
+        dog.move(last_time=step_seconds, vy=25000)
+        moved_seconds += step_seconds
+    else:
+        print("右移达到最大时间{:.1f}s，停止右移".format(max_move_seconds))
+    dog.stop()
+
+
 def _wait_single_dashboard(detector, dog):
     """普通循环：等待画面里只有一个仪表盘。"""
     while True:
@@ -359,7 +373,7 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         dog.move(last_time=7, vx=20000)
         time.sleep(0.5)
-        dog.move(last_time=5, vy=25000)
+        _move_right_until_letter(dog, detector)
         time.sleep(0.5)
 
         # ----------------------------

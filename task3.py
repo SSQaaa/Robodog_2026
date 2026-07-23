@@ -123,7 +123,7 @@ class Task3:
             self.dog.move(vy=-SIDE_SPEED, last_time=BACK_OFFSET_TIME - 4.0, duration=0.3)
             
 
-        self.dog.move(vx=FORWARD_SPEED, last_time=RETURN_FORWARD_SECONDS, duration=0.3)
+        self.move_forward_until_red()
         time.sleep(0.5)
 
     # 仪表盘状态决定抓红色还是绿色。
@@ -138,6 +138,20 @@ class Task3:
         if frame is None:
             return None, []
         return frame, [det for det in detections if det.class_name == class_name]
+
+    def move_forward_until_red(self):
+        moved_seconds = 0.0
+        while moved_seconds + 1e-9 < RETURN_FORWARD_SECONDS:
+            _, detections = self.vision.detect()
+            if any(det.class_name == "Red" for det in detections):
+                print("[Return] Red found, stop moving forward")
+                break
+            step_seconds = min(0.1, RETURN_FORWARD_SECONDS - moved_seconds)
+            self.dog.move(vx=FORWARD_SPEED, last_time=step_seconds)
+            moved_seconds += step_seconds
+        else:
+            print("[Return] max forward time reached")
+        self.dog.stop()
 
     def refind_box_letter(self, class_name, back_time=0.3):
         # 如果画面中有ABCD就直接左右移动
