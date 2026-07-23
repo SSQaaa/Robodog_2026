@@ -179,7 +179,7 @@ class Task3:
         time.sleep(0.5)
         return frame, []
 
-    def refind_block(self, block_class, back_time=0.2):
+    def refind_block(self, block_class, back_time=0.3):
         self.dog.stop()
         time.sleep(0.5)
         frame, matches = self.detect_matches(block_class)
@@ -212,7 +212,7 @@ class Task3:
     def x_move_by_depth(self, depth_mm):
         if depth_mm is not None and float(depth_mm) < 300.0:
             return 7000, 0.1
-        return 10000, 0.3
+        return 12000, 0.3
     
     # 抓取物块，抓取失败时重新校准并重新计算视觉坐标。
     def grasp(self, block_class):
