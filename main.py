@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import traceback
 import time
+from datetime import datetime
+
 import task1
 import task2
 import task2_3
@@ -13,6 +15,17 @@ from tools.vision import resolve_dashboard_status
 
 
 SHOW_TASK2_STREAM = True
+
+
+def input_run_time():
+    while True:
+        run_time = input("请输入本次运行时间（月日时分，例如 07282206）：").strip()
+        try:
+            datetime.strptime(run_time, "%m%d%H%M")
+        except ValueError:
+            print("[Main] 时间格式无效，请输入8位月日时分，例如 07282206")
+            continue
+        return run_time
 
 
 def get_task3_status(records):
@@ -32,6 +45,7 @@ def get_task3_status(records):
 
 
 def main():
+    manual_run_time = input_run_time()
     dog = None
     task3_runner = None
     total_started_at = time.perf_counter()
@@ -134,6 +148,7 @@ def main():
                 total_seconds=time.perf_counter() - total_started_at,
                 status=run_status,
                 errors=run_errors,
+                run_time=manual_run_time,
             )
         except Exception:
             print("[Timing] failed to save run log")

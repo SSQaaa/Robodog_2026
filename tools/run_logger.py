@@ -20,7 +20,7 @@ def _read_task1_cones():
         return "unavailable: {}".format(exc)
 
 
-def append_run_log(task_seconds, total_seconds, status, errors=None, path=LOG_PATH):
+def append_run_log(task_seconds, total_seconds, status, errors=None, path=LOG_PATH, run_time=None):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     columns = [
         "run_time",
@@ -34,7 +34,7 @@ def append_run_log(task_seconds, total_seconds, status, errors=None, path=LOG_PA
         "errors",
     ]
     row = {
-        "run_time": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "run_time": run_time or datetime.now().astimezone().isoformat(timespec="seconds"),
         "status": status,
         "task1_seconds": _format_seconds(task_seconds.get("task1")),
         "task2_seconds": _format_seconds(task_seconds.get("task2")),
