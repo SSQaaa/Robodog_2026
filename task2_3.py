@@ -274,27 +274,29 @@ def task2_3(dog, detector, start_yaw_deg):
         )
 
         if stable_count >= stable_need_frames:
-            print("[Task2_3] C centered, start distance adjustment")
-            return _adjust_c_distance(
-                dog,
-                detector,
-                c_distance_target_m,
-                c_distance_tolerance_m,
-                stable_need_frames,
-                max_distance_adjust_steps,
-            )
+            print("[Task2_3] C centered, skip distance adjustment")
+            # return _adjust_c_distance(
+            #     dog,
+            #     detector,
+            #     c_distance_target_m,
+            #     c_distance_tolerance_m,
+            #     stable_need_frames,
+            #     max_distance_adjust_steps,
+            # )
+            return None
 
         time.sleep(0.3)
 
-    print("[Task2_3] C centering max steps reached, start distance adjustment")
-    return _adjust_c_distance(
-        dog,
-        detector,
-        c_distance_target_m,
-        c_distance_tolerance_m,
-        stable_need_frames,
-        max_distance_adjust_steps,
-    )
+    print("[Task2_3] C centering max steps reached, skip distance adjustment")
+    # return _adjust_c_distance(
+    #     dog,
+    #     detector,
+    #     c_distance_target_m,
+    #     c_distance_tolerance_m,
+    #     stable_need_frames,
+    #     max_distance_adjust_steps,
+    # )
+    return None
 
 
 def run(dog, show_stream=False, start_yaw_deg=0.0):

@@ -72,7 +72,7 @@ def _move_right_until_letter(dog, detector, max_move_seconds=5.0):
         if _pick_best_letter_detection(detector.infer_once()) is not None:
             print("检测到字母，停止右移")
             break
-        step_seconds = min(0.1, max_move_seconds - moved_seconds)
+        step_seconds = min(0.3, max_move_seconds - moved_seconds)
         dog.move(last_time=step_seconds, vy=25000)
         moved_seconds += step_seconds
     else:

@@ -39,6 +39,7 @@ BOX_SEENED_DEPTH_MM = 1000.0
 BACK_OFFSET_TIME = 6.0
 
 RETURN_FORWARD_SECONDS = 3.0
+RETURN_RED_MAX_DEPTH_MM = 600.0
 
 SIDE_MOVE_SECONDS = 1.0
 
@@ -143,8 +144,21 @@ class Task3:
         moved_seconds = 0.0
         while moved_seconds + 1e-9 < RETURN_FORWARD_SECONDS:
             _, detections = self.vision.detect()
-            if any(det.class_name == "Red" for det in detections):
-                print("[Return] Red found, stop moving forward")
+            nearby_red = [
+                det
+                for det in detections
+                if (
+                    det.class_name == "Red"
+                    and det.depth_mm is not None
+                    and det.depth_mm < RETURN_RED_MAX_DEPTH_MM
+                )
+            ]
+            if nearby_red:
+                nearest_depth_mm = min(det.depth_mm for det in nearby_red)
+                print(
+                    f"[Return] Red found at {nearest_depth_mm:.1f}mm, "
+                    "stop moving forward"
+                )
                 break
             step_seconds = min(0.1, RETURN_FORWARD_SECONDS - moved_seconds)
             self.dog.move(vx=FORWARD_SPEED, last_time=step_seconds)
@@ -226,7 +240,7 @@ class Task3:
     def x_move_by_depth(self, depth_mm):
         if depth_mm is not None and float(depth_mm) < 300.0:
             return 7000, 0.1
-        return 12000, 0.3
+        return 20000, 0.3
     
     # 抓取物块，抓取失败时重新校准并重新计算视觉坐标。
     def grasp(self, block_class):
