@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import time
-
+# TODO:机械臂在放置物块的时候不够稳，物块掉落后会弹跳，另外，狗在向后退的时候，机械臂会左右晃动有可能把物块扫下去
 from arm_control import ArmControl, DEFAULT_CONFIG_PATH
 from project_config import (
     BACKWARD_SPEED,
@@ -160,7 +160,7 @@ class Task3:
                     "stop moving forward"
                 )
                 break
-            step_seconds = min(0.1, RETURN_FORWARD_SECONDS - moved_seconds)
+            step_seconds = min(0.3, RETURN_FORWARD_SECONDS - moved_seconds)
             self.dog.move(vx=FORWARD_SPEED, last_time=step_seconds)
             moved_seconds += step_seconds
         else:
