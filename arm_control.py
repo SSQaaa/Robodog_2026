@@ -21,12 +21,11 @@ from vision_grasp import pixel_to_camera, transform_point
 
 
 class ArmControl:
-    def __init__(self, config_path=DEFAULT_CONFIG_PATH, dry_run=False):
+    def __init__(self, config_path=DEFAULT_CONFIG_PATH):
         self.config = load_config(config_path)
         self.arm_cfg = self.config["arm"]
         self.camera_cfg = self.config["camera"]
         self.block_cfg = self.config["block"]
-        self.dry_run = bool(dry_run)
         self.bus = None
 
         if self.camera_cfg.get("T_base_camera") is None:
@@ -34,9 +33,6 @@ class ArmControl:
         self.T_base_camera = np.asarray(self.camera_cfg["T_base_camera"], dtype=np.float64)
 
     def start(self):
-        if self.dry_run:
-            print("[DryRun][Arm] servo bus not opened")
-            return self
         self.bus = ServoBus(self.arm_cfg)
         return self
 
@@ -51,9 +47,6 @@ class ArmControl:
             print("[Arm] reset_pose missing, skip reset")
             return
         print("[Arm] reset to configured pose")
-        if self.dry_run:
-            print("[DryRun][Arm] reset skipped")
-            return
         self.bus.move_targets(pose, wait_s=2.0)
 
     def pick_block(self, block_class, detection, color_intrinsics):
@@ -79,10 +72,6 @@ class ArmControl:
             )
         )
         print_solution(result["solution"])
-
-        if self.dry_run:
-            print("[DryRun][Arm] grasp sequence skipped")
-            return True
 
         pre_solution = plan["pre_solution"]
         post_solution = plan["post_solution"]
@@ -150,17 +139,12 @@ class ArmControl:
         solution = self.compute_place_pose()
         print("[Place] move to forward reach pose")
         print_solution(solution)
-        if self.dry_run:
-            print("[DryRun][Arm] place pose move skipped")
-        else:
-            self.bus.move_targets(solution.servo_targets, wait_s=1.5)
+        self.bus.move_targets(solution.servo_targets, wait_s=1.5)
 
         print("[Place] open gripper")
-        if self.dry_run:
-            print("[DryRun][Arm] gripper open skipped")
-            return
         self.bus.open_gripper()
         time.sleep(0.5)
+        self.reset()
 
     def compute_place_pose(self):
         table_z = float(self.block_cfg.get("table_z_base_mm", 0.0))
@@ -208,8 +192,8 @@ class ArmControl:
         }
 
 
-def reset_arm(config_path=DEFAULT_CONFIG_PATH, dry_run=False):
-    arm = ArmControl(config_path=config_path, dry_run=dry_run).start()
+def reset_arm(config_path=DEFAULT_CONFIG_PATH):
+    arm = ArmControl(config_path=config_path).start()
     try:
         arm.reset()
     finally:

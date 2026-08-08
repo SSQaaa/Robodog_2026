@@ -15,31 +15,19 @@ START_PLAN_X_M = -0.50
 START_PLAN_Y_M = 0.75
 FINISH_PLAN_X_M = 4.45
 FINISH_PLAN_Y_M = 0.75
-PLAN_FORWARD_SIGN = 1.0
 PLAN_LATERAL_SIGN = -1.0
-FORWARD_COMMAND_SIGN = 1.0
-LATERAL_COMMAND_SIGN = 1.0
-PLAN_YAW_OFFSET_RAD = 0.0
 
-FORWARD_VX = 18000
+FORWARD_VX = 20000
 FORWARD_SPEED_MPS = 0.6
 
 LATERAL_VY = 18000
-LATERAL_SPEED_MPS = 0.12
+LATERAL_SPEED_MPS = 0.10
 
 X_CORRECT_VX = 15000
 X_CORRECT_SPEED_MPS = 0.5
-X_CORRECT_MIN_STEP_S = 0.3
-X_CORRECT_MAX_STEP_S = 1.2
-Y_CORRECT_VY = 18000
-Y_CORRECT_SPEED_MPS = 0.12
-Y_CORRECT_MIN_STEP_S = 0.3
-Y_CORRECT_MAX_STEP_S = 1.2
 MOVE_SETTLE_S = 0.50
 
 WAYPOINT_TOLERANCE_M = 0.15
-MAX_X_CORRECT_STEPS = 10
-MAX_Y_CORRECT_STEPS = 10
 
 
 def load_path_plan_data(path=PLAN_PATH):
@@ -116,14 +104,14 @@ def normalize_angle_rad(angle):
 
 
 def plan_world_yaw_rad(start_world_pose):
-    return normalize_angle_rad(float(start_world_pose.yaw_rad) + PLAN_YAW_OFFSET_RAD)
+    return normalize_angle_rad(float(start_world_pose.yaw_rad))
 
 
 def plan_axis_vectors(yaw):
     cos_yaw = math.cos(yaw)
     sin_yaw = math.sin(yaw)
-    forward_x = PLAN_FORWARD_SIGN * cos_yaw
-    forward_y = PLAN_FORWARD_SIGN * sin_yaw
+    forward_x = cos_yaw
+    forward_y = sin_yaw
     right_x = PLAN_LATERAL_SIGN * -sin_yaw
     right_y = PLAN_LATERAL_SIGN * cos_yaw
     return forward_x, forward_y, right_x, right_y
@@ -141,11 +129,6 @@ def lock_plan_frame_to_start_pose(world_pose):
     )
 
 
-def correction_time_s(error_m, speed_mps, min_step_s, max_step_s):
-    raw_time = abs(float(error_m)) / max(float(speed_mps), 1e-6)
-    return max(float(min_step_s), min(float(max_step_s), raw_time))
-
-
 # 根据规划结果在xy轴移动
 def drive_axis_segment(dog: DogControl, axis, distance_m):
     distance_m = float(distance_m)
@@ -155,7 +138,7 @@ def drive_axis_segment(dog: DogControl, axis, distance_m):
     if axis == "x":
         speed_mps = FORWARD_SPEED_MPS
         command_sign = 1 if distance_m > 0 else -1
-        command = int(command_sign * FORWARD_COMMAND_SIGN * FORWARD_VX)
+        command = command_sign * FORWARD_VX
         last_time = abs(distance_m) / speed_mps
         print("[Task1][Move] x distance={:.3f}m vx={} time={:.2f}s".format(distance_m, command, last_time))
         dog.move(vx=command, last_time=last_time, duration=MOVE_SETTLE_S)
@@ -164,7 +147,7 @@ def drive_axis_segment(dog: DogControl, axis, distance_m):
     if axis == "y":
         speed_mps = LATERAL_SPEED_MPS
         command_sign = 1 if distance_m > 0 else -1
-        command = int(command_sign * LATERAL_COMMAND_SIGN * LATERAL_VY)
+        command = command_sign * LATERAL_VY
         last_time = abs(distance_m) / speed_mps
         print("[Task1][Move] y distance={:.3f}m vy={} time={:.2f}s".format(distance_m, command, last_time))
         one_second_steps = max(int(last_time) - 1, 0)
@@ -189,59 +172,43 @@ def drive_axis_segment(dog: DogControl, axis, distance_m):
 
 # 修正因为左右平移带来的x轴误差，单位m
 def correct_x_to_target(dog: DogControl, start_world_pose, target_x_m):
-    for attempt in range(1, MAX_X_CORRECT_STEPS + 1):
+    while True:
         current_x, current_y, yaw_rad, yaw_deg = current_plan_pose_with_yaw_m(start_world_pose)
         error_x = float(target_x_m) - current_x
         print(
-            "[Task1][Correct] attempt={} current=({:.3f}, {:.3f}) imu_yaw={:.3f}rad/{:.2f}deg target_x={:.3f} error_x={:.3f}".format(
-                attempt, current_x, current_y, yaw_rad, yaw_deg, target_x_m, error_x
+            "[Task1][CorrectX] current=({:.3f}, {:.3f}) imu_yaw={:.3f}rad/{:.2f}deg target_x={:.3f} error_x={:.3f}".format(
+                current_x, current_y, yaw_rad, yaw_deg, target_x_m, error_x
             )
         )
         if abs(error_x) <= WAYPOINT_TOLERANCE_M:
             return
 
         command_sign = 1 if error_x > 0 else -1
-        vx = int(command_sign * FORWARD_COMMAND_SIGN * X_CORRECT_VX)
-        step_s = correction_time_s(error_x, X_CORRECT_SPEED_MPS, X_CORRECT_MIN_STEP_S, X_CORRECT_MAX_STEP_S)
+        vx = command_sign * X_CORRECT_VX
+        step_s = abs(error_x) / X_CORRECT_SPEED_MPS
         dog.move(vx=vx, last_time=step_s, duration=MOVE_SETTLE_S)
         print("[Task1][CorrectX] x correction step: vx={} time={:.2f}s".format(vx, step_s))
 
-    current_x, current_y = current_plan_pose_m(start_world_pose)
-    raise RuntimeError(
-        "Task1 x correction failed: current=({:.3f}, {:.3f}) target_x={:.3f} tolerance={:.3f}".format(
-            current_x, current_y, target_x_m, WAYPOINT_TOLERANCE_M
-        )
-    )
-
-
 def correct_y_to_target(dog: DogControl, start_world_pose, target_y_m):
-    for attempt in range(1, MAX_Y_CORRECT_STEPS + 1):
+    while True:
         current_x, current_y, yaw_rad, yaw_deg = current_plan_pose_with_yaw_m(start_world_pose)
         error_y = float(target_y_m) - current_y
         print(
-            "[Task1][CorrectY] attempt={} current=({:.3f}, {:.3f}) imu_yaw={:.3f}rad/{:.2f}deg target_y={:.3f} error_y={:.3f}".format(
-                attempt, current_x, current_y, yaw_rad, yaw_deg, target_y_m, error_y
+            "[Task1][CorrectY] current=({:.3f}, {:.3f}) imu_yaw={:.3f}rad/{:.2f}deg target_y={:.3f} error_y={:.3f}".format(
+                current_x, current_y, yaw_rad, yaw_deg, target_y_m, error_y
             )
         )
         if abs(error_y) <= WAYPOINT_TOLERANCE_M:
             return
 
         command_sign = 1 if error_y > 0 else -1
-        vy = int(command_sign * LATERAL_COMMAND_SIGN * Y_CORRECT_VY)
-        step_s = correction_time_s(error_y, Y_CORRECT_SPEED_MPS, Y_CORRECT_MIN_STEP_S, Y_CORRECT_MAX_STEP_S)
+        vy = command_sign * LATERAL_VY
+        step_s = abs(error_y) / LATERAL_SPEED_MPS
         dog.move(vy=vy, last_time=step_s, duration=MOVE_SETTLE_S)
         # time.sleep(0.5)
         dog.move(last_time=0.12*step_s, vx=10000)
         print("[Task1][CorrectY] y correction step: vy={} time={:.2f}s".format(vy, step_s))
         print("[Task1][Move] y correction 10000 0.1")
-
-    current_x, current_y = current_plan_pose_m(start_world_pose)
-    raise RuntimeError(
-        "Task1 y correction failed: current=({:.3f}, {:.3f}) target_y={:.3f} tolerance={:.3f}".format(
-            current_x, current_y, target_y_m, WAYPOINT_TOLERANCE_M
-        )
-    )
-
 
 def execute_path(dog: DogControl, waypoints_m, start_world_pose):
     print("[Task1] loaded {} waypoints".format(len(waypoints_m)))

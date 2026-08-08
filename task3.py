@@ -47,10 +47,10 @@ BOX_LETTER_ORDER = ("A", "B", "C", "D")
 
 
 class Task3:
-    def __init__(self, status_dict=None, dog=None, config_path=DEFAULT_CONFIG_PATH, dry_run=False):
+    def __init__(self, status_dict=None, dog=None, config_path=DEFAULT_CONFIG_PATH):
         self.status_dict = dict(status_dict or DASHBOARD_STATUS)
         self.vision = YoloDepthDetector()
-        self.arm = ArmControl(config_path=config_path, dry_run=dry_run)
+        self.arm = ArmControl(config_path=config_path)
         self.dog = dog
         self._own_dog = dog is None
 
