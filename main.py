@@ -126,9 +126,9 @@ def main():
         print("[Main] initialize task3 vision in background")
         task3_vision = YoloDepthDetector()
         task3_vision_future = detector_executor.submit(task3_vision.start)
-        time.sleep(2)
+        # time.sleep(2)
         dog.revolve_180()
-        time.sleep(2)
+        # time.sleep(2)
 
         print("[Main] reset arm before task3")
         active_task = "task3"
