@@ -164,7 +164,7 @@ class ArmControl:
 
     def compute_place_pose(self):
         table_z = float(self.block_cfg.get("table_z_base_mm", 0.0))
-        place_z = table_z + float(self.arm_cfg.get("place_height_above_table_mm", 100.0))
+        place_z = table_z + float(self.arm_cfg.get("place_height_above_table_mm", 27.0))
         lengths = self.arm_cfg["link_lengths_mm"]
         l1 = float(lengths["L1"])
         l2 = float(lengths["L2"])
