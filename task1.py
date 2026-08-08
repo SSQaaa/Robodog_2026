@@ -11,9 +11,9 @@ from tools.world_pose import read_imu_yaw_once, read_world_pose_once
 
 PLAN_PATH = os.path.join(PROJECT_DIR, "tools", "task1_path_plan.json")
 
-START_PLAN_X_M = -0.50
+START_PLAN_X_M = -0.35
 START_PLAN_Y_M = 0.75
-FINISH_PLAN_X_M = 4.45
+FINISH_PLAN_X_M = 4.35
 FINISH_PLAN_Y_M = 0.75
 PLAN_LATERAL_SIGN = -1.0
 
@@ -23,11 +23,11 @@ FORWARD_SPEED_MPS = 0.6
 LATERAL_VY = 18000
 LATERAL_SPEED_MPS = 0.10
 
-X_CORRECT_VX = 18000
-X_CORRECT_SPEED_MPS = 0.5
+X_CORRECT_VX = 10000
+X_CORRECT_SPEED_MPS = 0.4
 MOVE_SETTLE_S = 0.50
 
-WAYPOINT_TOLERANCE_M = 0.15
+WAYPOINT_TOLERANCE_M = 0.10
 
 
 def load_path_plan_data(path=PLAN_PATH):
@@ -210,7 +210,7 @@ def correct_y_to_target(dog: DogControl, start_world_pose, target_y_m):
         print("[Task1][CorrectY] y correction step: vy={} time={:.2f}s".format(vy, step_s))
         print("[Task1][Move] y correction 10000 0.1")
 
-def execute_path(dog: DogControl, waypoints_m, start_world_pose):
+def execute_path(dog: DogControl, waypoints_m, start_world_pose, on_first_move=None):
     print("[Task1] loaded {} waypoints".format(len(waypoints_m)))
     for i, (x, y) in enumerate(waypoints_m):
         print("[Task1] waypoint {}: ({:.3f}, {:.3f})m".format(i, x, y))
@@ -242,6 +242,9 @@ def execute_path(dog: DogControl, waypoints_m, start_world_pose):
                 target_y - current_y,
             )
         )
+        if on_first_move is not None:
+            on_first_move()
+            on_first_move = None
         drive_axis_segment(dog, axis, distance_m)
         if axis == "y":
             correct_y_to_target(dog, start_world_pose, target_y)
@@ -251,7 +254,7 @@ def execute_path(dog: DogControl, waypoints_m, start_world_pose):
             correct_y_to_target(dog, start_world_pose, target_y)
 
 
-def run(dog: DogControl, plan_path=PLAN_PATH):
+def run(dog: DogControl, plan_path=PLAN_PATH, on_navigation_ready=None):
     print("[Task1] DogControl class from {}.{}".format(dog.__class__.__module__, dog.__class__.__name__))
     print("[Task1] loading path plan: {}".format(os.path.abspath(plan_path)))
     plan_data = load_path_plan_data(plan_path)
@@ -271,9 +274,8 @@ def run(dog: DogControl, plan_path=PLAN_PATH):
             START_PLAN_Y_M,
         )
     )
-
     try:
-        execute_path(dog, waypoints_m, start_world_pose)
+        execute_path(dog, waypoints_m, start_world_pose, on_first_move=on_navigation_ready)
         print("[Task1][Stop] finish reached")
         dog.stop()
         time.sleep(0.2)

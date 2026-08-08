@@ -74,13 +74,15 @@ def main():
         start_yaw_deg = task2_3.read_current_yaw_deg()
         print("[Main] start_yaw_deg={:.3f}".format(start_yaw_deg))
 
-        print("[Main] initialize task2 vision in background")
-        dashboard_future = detector_executor.submit(DashboardInfer, show_stream=SHOW_TASK2_STREAM)
+        def initialize_task2_vision():
+            nonlocal dashboard_future
+            print("[Main] initialize task2 vision in background")
+            dashboard_future = detector_executor.submit(DashboardInfer, show_stream=SHOW_TASK2_STREAM)
 
         print("[Main] start task1")
         active_task = "task1"
         task_started_at = time.perf_counter()
-        task1.run(dog)
+        task1.run(dog, on_navigation_ready=initialize_task2_vision)
         print("[Main] task1 finished, check yaw once")
         task2_3.rotate_to_relative_yaw_once(dog, start_yaw_deg - 90.0)
         task_seconds["task1"] = time.perf_counter() - task_started_at
@@ -154,7 +156,7 @@ def main():
     finally:
         if active_task is not None and active_task not in task_seconds:
             task_seconds[active_task] = time.perf_counter() - task_started_at
-        detector_executor.shutdown(wait=True, cancel_futures=True)
+        detector_executor.shutdown(wait=True)
         if dashboard_detector is None and dashboard_future is not None:
             try:
                 dashboard_detector = dashboard_future.result()

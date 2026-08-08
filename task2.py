@@ -91,7 +91,7 @@ def _wait_single_dashboard(detector, dog):
 
         if result["dashboard_count"] <= 0:
             print("SEARCH: 没有仪表盘，继续等待")
-            dog.move(last_time=0.10, vx=-7000)
+            dog.move(last_time=0.10, vx=-10000)
             time.sleep(0.25)
         else:
             print("SEARCH: 多个仪表盘，继续等待")
@@ -186,9 +186,9 @@ def _run_single_dashboard_with_detector(
     max_ssi_check_retry_count,
 ):
     # ----------------------------
-    # 二、状态机：先调整距离，再让字母居中，最后切换到匍匐
+    # 二、状态机：先让字母位置合适（居中+距离），再切换到匍匐
     # ----------------------------
-    letter_state = "DISTANCE"  # DISTANCE / ALIGN
+    letter_state = "ALIGN"  # ALIGN / DISTANCE
     letter_align_adjust_count = 0
     letter_distance_adjust_count = 0
     letter_missing_count = 0
@@ -200,14 +200,14 @@ def _run_single_dashboard_with_detector(
         if letter_det is None:
             letter_missing_count += 1
             print("D{} LETTER_PRECHECK: 字母未识别，等待第{}次".format(dashboard_index, letter_missing_count))
-            letter_state = "DISTANCE"
+            letter_state = "ALIGN"
             letter_align_adjust_count = 0
             letter_distance_adjust_count = 0
             time.sleep(0.1)
 
             if letter_missing_count >= 3:
                 print("D{} LETTER_PRECHECK: 连续3次未识别到字母，后退一点".format(dashboard_index))
-                dog.move(last_time=0.10, vx=-8000)
+                dog.move(last_time=0.10, vx=-10000)
                 letter_missing_count = 0
                 time.sleep(0.5)
             continue
@@ -231,8 +231,9 @@ def _run_single_dashboard_with_detector(
                 print("D{} LETTER_ALIGN: {} 偏右，右移，x_center={:.1f} 次数={}".format(dashboard_index, letter, letter_x_center, letter_align_adjust_count))
                 time.sleep(0.25)
             else:
-                print("D{} LETTER_ALIGN: 居中通过，字母阶段完成".format(dashboard_index))
-                break
+                print("D{} LETTER_ALIGN: 居中通过，进入LETTER_DISTANCE".format(dashboard_index))
+                letter_state = "DISTANCE"
+                letter_distance_adjust_count = 0
 
             if letter_align_adjust_count > max_letter_align_adjust_count:
                 print("D{} LETTER_ALIGN: 超限，重置到ALIGN".format(dashboard_index))
@@ -259,10 +260,8 @@ def _run_single_dashboard_with_detector(
 
             letter_error_m = letter_distance_target_m - float(letter_distance_m)
             if abs(letter_error_m) <= letter_distance_tolerance_m:
-                print("D{} LETTER_DISTANCE: 距离通过，进入LETTER_ALIGN，letter={} d={:.3f}m".format(dashboard_index, letter, letter_distance_m))
-                letter_state = "ALIGN"
-                letter_align_adjust_count = 0
-                continue
+                print("D{} LETTER_DISTANCE: 距离通过，字母阶段完成，letter={} x={:.1f} d={:.3f}m".format(dashboard_index, letter, letter_x_center, letter_distance_m))
+                break
 
             if abs(letter_error_m) > 0.20:
                 letter_vx_abs = 10000
@@ -288,7 +287,9 @@ def _run_single_dashboard_with_detector(
             time.sleep(0.25)
 
             if letter_distance_adjust_count > max_letter_distance_adjust_count:
-                print("D{} LETTER_DISTANCE: 超限，重新调整距离".format(dashboard_index))
+                print("D{} LETTER_DISTANCE: 超限，回到LETTER_ALIGN".format(dashboard_index))
+                letter_state = "ALIGN"
+                letter_align_adjust_count = 0
                 letter_distance_adjust_count = 0
             continue
 
@@ -320,7 +321,7 @@ def _run_single_dashboard_with_detector(
             time.sleep(1.0)
             break
 
-        dog.move(last_time=0.02, vx=-7000)
+        dog.move(last_time=0.02, vx=-10000)
         ssi_check_retry_count += 1
         print("D{} SSI_CHECK: 未检测到ssi，后退微调，次数={}".format(dashboard_index, ssi_check_retry_count))
         time.sleep(0.25)
@@ -372,15 +373,15 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         dog.move(last_time=7, vx=20000)
         time.sleep(0.5)
-        dog.move(last_time=2, vy=25000)
+        dog.move(last_time=4, vy=25000)
         _move_right_until_letter(dog, detector)
         time.sleep(0.5)
 
         # ----------------------------
         # 第1个仪表盘阈值
         # ----------------------------
-        first_letter_x_center_min = 345
-        first_letter_x_center_max = 375
+        first_letter_x_center_min = 335
+        first_letter_x_center_max = 385
         first_letter_distance_target_m = 0.35
         first_letter_distance_tolerance_m = 0.10
         first_max_letter_align_adjust_count = 15
@@ -426,8 +427,8 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         # 第2个仪表盘阈值
         # ----------------------------
-        second_letter_x_center_min = 345
-        second_letter_x_center_max = 375
+        second_letter_x_center_min = 335
+        second_letter_x_center_max = 385
         second_letter_distance_target_m = 0.35
         second_letter_distance_tolerance_m = 0.10
         second_max_letter_align_adjust_count = 15
@@ -465,8 +466,8 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         # 第3个仪表盘阈值
         # ----------------------------
-        third_letter_x_center_min = 345
-        third_letter_x_center_max = 375
+        third_letter_x_center_min = 335
+        third_letter_x_center_max = 385
         third_letter_distance_target_m = 0.35
         third_letter_distance_tolerance_m = 0.10
         third_max_letter_align_adjust_count = 15
@@ -508,8 +509,8 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         # 第4个仪表盘阈值
         # ----------------------------
-        fourth_letter_x_center_min = 345
-        fourth_letter_x_center_max = 375
+        fourth_letter_x_center_min = 335
+        fourth_letter_x_center_max = 385
         fourth_letter_distance_target_m = 0.35
         fourth_letter_distance_tolerance_m = 0.10
         fourth_max_letter_align_adjust_count = 15
