@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import traceback
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 import task1
@@ -11,7 +12,7 @@ from project_config import DEFAULT_DASHBOARD_STATUS
 from task3 import Task3
 from tools.motion import DogControl
 from tools.run_logger import append_run_log
-from tools.vision import resolve_dashboard_status
+from tools.vision import DashboardInfer, YoloDepthDetector, resolve_dashboard_status
 
 
 SHOW_TASK2_STREAM = True
@@ -47,6 +48,11 @@ def get_task3_status(records):
 def main():
     manual_run_time = input_run_time()
     dog = None
+    detector_executor = ThreadPoolExecutor(max_workers=1)
+    dashboard_detector = None
+    dashboard_future = None
+    task3_vision = None
+    task3_vision_future = None
     task3_runner = None
     total_started_at = time.perf_counter()
     task_seconds = {}
@@ -68,6 +74,9 @@ def main():
         start_yaw_deg = task2_3.read_current_yaw_deg()
         print("[Main] start_yaw_deg={:.3f}".format(start_yaw_deg))
 
+        print("[Main] initialize task2 vision in background")
+        dashboard_future = detector_executor.submit(DashboardInfer, show_stream=SHOW_TASK2_STREAM)
+
         print("[Main] start task1")
         active_task = "task1"
         task_started_at = time.perf_counter()
@@ -84,7 +93,8 @@ def main():
         active_task = "task2"
         task_started_at = time.perf_counter()
         try:
-            records = task2.run(dog, show_stream=SHOW_TASK2_STREAM)
+            dashboard_detector = dashboard_future.result()
+            records = task2.run(dog, show_stream=SHOW_TASK2_STREAM, detector=dashboard_detector)
         except Exception as exc:
             print("[Main] task2 failed, use default task3 status")
             traceback.print_exc()
@@ -96,12 +106,24 @@ def main():
         status_by_letter = get_task3_status(records)
         print(f"[Main] task3 status={status_by_letter}")
 
+        if dashboard_detector is None:
+            print("[Main] retry task2_3 vision initialization")
+            dashboard_detector = DashboardInfer(show_stream=SHOW_TASK2_STREAM)
+
         print("[Main] start task2_3 bridge")
         active_task = "task2_3"
         task_started_at = time.perf_counter()
-        task2_3.run(dog, start_yaw_deg=start_yaw_deg)
+        task2_3.run(dog, start_yaw_deg=start_yaw_deg, detector=dashboard_detector)
         task_seconds["task2_3"] = time.perf_counter() - task_started_at
         active_task = None
+        dashboard_detector.close()
+        dashboard_detector = None
+        dashboard_future = None
+        print("[Main] task2/task2_3 detector closed")
+
+        print("[Main] initialize task3 vision in background")
+        task3_vision = YoloDepthDetector()
+        task3_vision_future = detector_executor.submit(task3_vision.start)
         time.sleep(2)
         dog.revolve_180()
         time.sleep(2)
@@ -110,7 +132,10 @@ def main():
         active_task = "task3"
         task_started_at = time.perf_counter()
         reset_arm()
-        task3_runner = Task3(status_dict=status_by_letter, dog=dog)
+        task3_vision_future.result()
+        task3_runner = Task3(status_dict=status_by_letter, dog=dog, vision=task3_vision)
+        task3_vision = None
+        task3_vision_future = None
         print("[Main] start task3")
         task3_runner.start()
         task3_runner.run()
@@ -129,6 +154,24 @@ def main():
     finally:
         if active_task is not None and active_task not in task_seconds:
             task_seconds[active_task] = time.perf_counter() - task_started_at
+        detector_executor.shutdown(wait=True, cancel_futures=True)
+        if dashboard_detector is None and dashboard_future is not None:
+            try:
+                dashboard_detector = dashboard_future.result()
+            except Exception:
+                dashboard_detector = None
+        if dashboard_detector is not None:
+            try:
+                dashboard_detector.close()
+            except Exception:
+                print("[Main] failed to close task2 detector")
+                traceback.print_exc()
+        if task3_vision is not None:
+            try:
+                task3_vision.stop()
+            except Exception:
+                print("[Main] failed to close task3 vision")
+                traceback.print_exc()
         if task3_runner is not None:
             try:
                 task3_runner.close()

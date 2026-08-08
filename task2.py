@@ -186,9 +186,9 @@ def _run_single_dashboard_with_detector(
     max_ssi_check_retry_count,
 ):
     # ----------------------------
-    # 二、状态机：先让字母位置合适（居中+距离），再切换到匍匐
+    # 二、状态机：先调整距离，再让字母居中，最后切换到匍匐
     # ----------------------------
-    letter_state = "ALIGN"  # ALIGN / DISTANCE
+    letter_state = "DISTANCE"  # DISTANCE / ALIGN
     letter_align_adjust_count = 0
     letter_distance_adjust_count = 0
     letter_missing_count = 0
@@ -200,7 +200,7 @@ def _run_single_dashboard_with_detector(
         if letter_det is None:
             letter_missing_count += 1
             print("D{} LETTER_PRECHECK: 字母未识别，等待第{}次".format(dashboard_index, letter_missing_count))
-            letter_state = "ALIGN"
+            letter_state = "DISTANCE"
             letter_align_adjust_count = 0
             letter_distance_adjust_count = 0
             time.sleep(0.1)
@@ -231,9 +231,8 @@ def _run_single_dashboard_with_detector(
                 print("D{} LETTER_ALIGN: {} 偏右，右移，x_center={:.1f} 次数={}".format(dashboard_index, letter, letter_x_center, letter_align_adjust_count))
                 time.sleep(0.25)
             else:
-                print("D{} LETTER_ALIGN: 居中通过，进入LETTER_DISTANCE".format(dashboard_index))
-                letter_state = "DISTANCE"
-                letter_distance_adjust_count = 0
+                print("D{} LETTER_ALIGN: 居中通过，字母阶段完成".format(dashboard_index))
+                break
 
             if letter_align_adjust_count > max_letter_align_adjust_count:
                 print("D{} LETTER_ALIGN: 超限，重置到ALIGN".format(dashboard_index))
@@ -260,8 +259,10 @@ def _run_single_dashboard_with_detector(
 
             letter_error_m = letter_distance_target_m - float(letter_distance_m)
             if abs(letter_error_m) <= letter_distance_tolerance_m:
-                print("D{} LETTER_DISTANCE: 距离通过，字母阶段完成，letter={} x={:.1f} d={:.3f}m".format(dashboard_index, letter, letter_x_center, letter_distance_m))
-                break
+                print("D{} LETTER_DISTANCE: 距离通过，进入LETTER_ALIGN，letter={} d={:.3f}m".format(dashboard_index, letter, letter_distance_m))
+                letter_state = "ALIGN"
+                letter_align_adjust_count = 0
+                continue
 
             if abs(letter_error_m) > 0.20:
                 letter_vx_abs = 10000
@@ -287,9 +288,7 @@ def _run_single_dashboard_with_detector(
             time.sleep(0.25)
 
             if letter_distance_adjust_count > max_letter_distance_adjust_count:
-                print("D{} LETTER_DISTANCE: 超限，回到LETTER_ALIGN".format(dashboard_index))
-                letter_state = "ALIGN"
-                letter_align_adjust_count = 0
+                print("D{} LETTER_DISTANCE: 超限，重新调整距离".format(dashboard_index))
                 letter_distance_adjust_count = 0
             continue
 
@@ -373,6 +372,7 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         dog.move(last_time=7, vx=20000)
         time.sleep(0.5)
+        dog.move(last_time=2, vy=25000)
         _move_right_until_letter(dog, detector)
         time.sleep(0.5)
 
@@ -544,11 +544,14 @@ def task2_new(dog, detector, show_stream=False):
     return records
 
 
-def run(dog, show_stream=False):
-    detector = DashboardInfer(show_stream=show_stream)
+def run(dog, show_stream=False, detector=None):
+    own_detector = detector is None
+    if own_detector:
+        detector = DashboardInfer(show_stream=show_stream)
     try:
         return task2_new(dog, detector, show_stream=show_stream)
     finally:
-        detector.close()
-        print("[Task2] detector closed")
+        if own_detector:
+            detector.close()
+            print("[Task2] detector closed")
 

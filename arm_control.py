@@ -144,7 +144,6 @@ class ArmControl:
         print("[Place] open gripper")
         self.bus.open_gripper()
         time.sleep(0.5)
-        self.reset()
 
     def compute_place_pose(self):
         table_z = float(self.block_cfg.get("table_z_base_mm", 0.0))

@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from concurrent.futures import ThreadPoolExecutor
 import time
 # TODO:机械臂在放置物块的时候不够稳，物块掉落后会弹跳，另外，狗在向后退的时候，机械臂会左右晃动有可能把物块扫下去
 from arm_control import ArmControl, DEFAULT_CONFIG_PATH
@@ -47,15 +48,18 @@ BOX_LETTER_ORDER = ("A", "B", "C", "D")
 
 
 class Task3:
-    def __init__(self, status_dict=None, dog=None, config_path=DEFAULT_CONFIG_PATH):
+    def __init__(self, status_dict=None, dog=None, config_path=DEFAULT_CONFIG_PATH, vision=None):
         self.status_dict = dict(status_dict or DASHBOARD_STATUS)
-        self.vision = YoloDepthDetector()
+        self.vision = vision or YoloDepthDetector()
+        self._vision_started = vision is not None
         self.arm = ArmControl(config_path=config_path)
         self.dog = dog
         self._own_dog = dog is None
 
     def start(self):
-        self.vision.start()
+        if not self._vision_started:
+            self.vision.start()
+            self._vision_started = True
         self.arm.start()
         if self.dog is None:
             self.dog = DogControl()
@@ -108,8 +112,10 @@ class Task3:
         # 到达30cm后再往前冲刺一咪咪
         self.dog.move(vx=10000, last_time=0.25, duration=0.3)
         self.arm.place_block()
-        time.sleep(0.5)
-        self.dog.move(vx=-15000, last_time=1, duration=0.3)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            reset_future = executor.submit(self.arm.reset)
+            self.dog.move(vx=-15000, last_time=1, duration=0.3)
+            reset_future.result()
 
         if not should_return:
             return

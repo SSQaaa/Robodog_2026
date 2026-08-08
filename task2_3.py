@@ -299,10 +299,13 @@ def task2_3(dog, detector, start_yaw_deg):
     return None
 
 
-def run(dog, show_stream=False, start_yaw_deg=0.0):
-    detector = DashboardInfer(show_stream=show_stream)
+def run(dog, show_stream=False, start_yaw_deg=0.0, detector=None):
+    own_detector = detector is None
+    if own_detector:
+        detector = DashboardInfer(show_stream=show_stream)
     try:
         return task2_3(dog, detector, start_yaw_deg)
     finally:
-        detector.close()
-        print("[Task2_3] detector closed")
+        if own_detector:
+            detector.close()
+            print("[Task2_3] detector closed")
