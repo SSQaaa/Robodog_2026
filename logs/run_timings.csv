@@ -8,3 +8,10 @@
 07282213,completed,85.263,145.535,43.744,130.166,422.948,"[[1300, 340], [3120, 1157]]",
 08081817,failed,95.068,190.320,47.050,81.745,432.552,"[[900, 524], [2570, 1090]]",
 08081845,completed,91.123,165.385,25.343,127.916,427.873,"[[900, 524], [2570, 1090]]",
+08081940,failed,87.523,,,,95.761,"[[1300, 432], [3400, 980]]",
+08081943,failed,83.716,,,,91.876,"[[1300, 432], [3400, 980]]",
+08082010,failed,0.075,,,,7.679,"""unavailable: Task1 path plan start/finish mismatch. expected start_mm=[-350, 750] finish_mm=[4450, 750], got start_mm=[-500, 750] finish_mm=[4450, 750]. Run tools/task1_path_planner.py and press s to save again.""","main: Task1 path plan start/finish mismatch. expected start_mm=[-350, 750] finish_mm=[4450, 750], got start_mm=[-500, 750] finish_mm=[4450, 750]. Run tools/task1_path_planner.py and press s to save again."
+08081012,failed,80.500,69.543,,,160.021,"[[1350, 160], [3400, 1044]]",
+08082023,failed,0.066,,,,7.693,"""unavailable: Task1 path plan start/finish mismatch. expected start_mm=[-350, 750] finish_mm=[4350, 750], got start_mm=[-350, 750] finish_mm=[4450, 750]. Run tools/task1_path_planner.py and press s to save again.""","main: Task1 path plan start/finish mismatch. expected start_mm=[-350, 750] finish_mm=[4350, 750], got start_mm=[-350, 750] finish_mm=[4450, 750]. Run tools/task1_path_planner.py and press s to save again."
+08082025,failed,82.622,179.446,,,272.154,"[[1350, 218], [3400, 1105]]",
+08082033,completed,78.437,135.724,41.355,115.634,389.754,"[[1350, 218], [3400, 1105]]",

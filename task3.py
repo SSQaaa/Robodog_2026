@@ -246,7 +246,9 @@ class Task3:
     def x_move_by_depth(self, depth_mm):
         if depth_mm is not None and float(depth_mm) < 300.0:
             return 7000, 0.1
-        return 20000, 0.3
+        elif depth_mm is not None and float(depth_mm) < 600.0:
+            return 20000, 0.3
+        return 20000, 0.5
     
     # 抓取物块，抓取失败时重新校准并重新计算视觉坐标。
     def grasp(self, block_class):
