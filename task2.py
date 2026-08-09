@@ -17,7 +17,7 @@ import time
 
 from tools.audio_announce import announce_dashboard
 from tools.vision import DashboardInfer, analyze_infer_output
-# from tasks.task2_3 import rotate_to_relative_yaw
+from tools.world_pose import correct_yaw, read_yaw_deg
 
 def _calc_center_x_from_vertices(vertices):
     """根据四顶点计算中心x。"""
@@ -72,7 +72,7 @@ def _move_right_until_letter(dog, detector, max_move_seconds=5.0):
         if _pick_best_letter_detection(detector.infer_once()) is not None:
             print("检测到字母，停止右移")
             break
-        step_seconds = min(0.3, max_move_seconds - moved_seconds)
+        step_seconds = min(0.7, max_move_seconds - moved_seconds)
         dog.move(last_time=step_seconds, vy=25000)
         moved_seconds += step_seconds
     else:
@@ -303,7 +303,7 @@ def _run_single_dashboard_with_detector(
     # ----------------------------
     time.sleep(1.8)
     dog.UPDOWN()
-    time.sleep(2)
+    # time.sleep(2)
     ssi_check_retry_count = 0
     while True:
         infer_output = detector.infer_once()
@@ -414,9 +414,6 @@ def task2_new(dog, detector, show_stream=False):
         time.sleep(0.5)
         dog.move(last_time=2, vx=20000)
         time.sleep(0.5)
-        # print("BRIDGE: 开始IMU角度调整")
-        # final_yaw = rotate_to_relative_yaw(dog, -174.0)
-        # print("BRIDGE: IMU角度调整完成，当前yaw={:.3f}".format(final_yaw))
         # dog.move(last_time=0.18, vz=10000) #定
         # time.sleep(0.8)
         # dog.move(last_time =5.8, vx=20000)   #定
@@ -496,12 +493,20 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         dog.UPDOWN()
         time.sleep(0.5)
+        yaw_before_turn = read_yaw_deg()
         dog.revolve_90_r()
-        time.sleep(2)
+        time.sleep(0.5)
+        correct_yaw(
+            dog,
+            yaw_before_turn - 90.0,
+            max_adjust_steps=1,
+            stable_need_frames=3,
+            settle_s=0.0,
+        )
         # 换了个足端感觉没有变斜情况了
         # dog.move(last_time=0.18, vz=10000)
         time.sleep(0.5)
-        dog.move(last_time=6.0, vx=20000)
+        dog.move(last_time=5.5, vx=20000)
         time.sleep(0.5)
         dog.revolve_90_l()
         time.sleep(0.5)

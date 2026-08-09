@@ -149,6 +149,16 @@ class Task3:
             return None, []
         return frame, [det for det in detections if det.class_name == class_name]
 
+    def select_block(self, block_class, matches, frame_width):
+        if block_class == "Red" and len(matches) > 1:
+            target = max(matches, key=lambda det: det.center[0])
+            print(
+                f"[BlockSelect] choose rightmost Red x={target.center[0]:.1f} "
+                f"from {len(matches)} blocks"
+            )
+            return target
+        return min(matches, key=lambda det: abs(det.center[0] - frame_width / 2))
+
     def move_forward_until_red(self):
         moved_seconds = 0.0
         while moved_seconds + 1e-9 < RETURN_FORWARD_SECONDS:
@@ -299,8 +309,7 @@ class Task3:
 
             missing_count = 0
             _, frame_w = frame.shape[:2]
-            matches.sort(key=lambda det: abs(det.center[0] - frame_w / 2))
-            block = matches[0]
+            block = self.select_block(block_class, matches, frame_w)
             last_seen = block
 
             error_x = block.center[0] - frame_w * 0.5
@@ -343,8 +352,7 @@ class Task3:
             
             missing_count = 0
             _, frame_w = frame.shape[:2]
-            matches.sort(key=lambda det: abs(det.center[0] - frame_w / 2))
-            block = matches[0]
+            block = self.select_block(block_class, matches, frame_w)
             last_seen = block
 
             error_x = block.center[0] - frame_w * 0.5

@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-import math
 import time
 
 from tools.vision import DashboardInfer
-from tools.world_pose import read_imu_yaw_once
+from tools.world_pose import correct_yaw
 
 
 def _pick_best_by_class(detections, class_id):
@@ -24,109 +23,6 @@ def _box_center_x(det):
     x1, y1, x2, y2 = det["xyxy"]
     _ = y1, y2
     return (float(x1) + float(x2)) / 2.0
-
-
-def _normalize_yaw_error(target_yaw, current_yaw):
-    error = float(target_yaw) - float(current_yaw)
-    while error > 180.0:
-        error -= 360.0
-    while error < -180.0:
-        error += 360.0
-    return error
-
-
-def _average_yaw_deg(yaw_list):
-    sin_sum = 0.0
-    cos_sum = 0.0
-    for yaw in yaw_list:
-        yaw_rad = math.radians(float(yaw))
-        sin_sum += math.sin(yaw_rad)
-        cos_sum += math.cos(yaw_rad)
-    return math.degrees(math.atan2(sin_sum, cos_sum))
-
-
-def read_current_yaw_deg(sample_count=3):
-    yaw_list = []
-
-    for _ in range(sample_count):
-        yaw_list.append(read_imu_yaw_once().yaw_deg)
-        time.sleep(0.05)
-
-    return _average_yaw_deg(yaw_list)
-
-
-def rotate_to_relative_yaw(dog, target_yaw_deg, tolerance_deg=3.0, max_adjust_steps=3):
-    stable_need_frames = 3
-    yaw_vz_small = 9555
-    yaw_vz_large = 10000
-    stable_count = 0
-
-    for step in range(max_adjust_steps):
-        current_yaw = read_current_yaw_deg()
-        error = _normalize_yaw_error(target_yaw_deg, current_yaw)
-
-        if abs(error) <= tolerance_deg:
-            stable_count += 1
-            print(
-                "YAW: step={} stable={}/{} current={:.3f} target={:.3f} error={:.3f}".format(
-                    step + 1,
-                    stable_count,
-                    stable_need_frames,
-                    current_yaw,
-                    target_yaw_deg,
-                    error,
-                )
-            )
-            if stable_count >= stable_need_frames:
-                print("YAW: adjustment complete")
-                return current_yaw
-            time.sleep(0.2)
-            continue
-
-        stable_count = 0
-        vz_abs = yaw_vz_large if abs(error) > 30.0 else yaw_vz_small
-        vz_cmd = -vz_abs if error > 0 else vz_abs
-
-        print(
-            "YAW: step={} current={:.3f} target={:.3f} error={:.3f} vz={}".format(
-                step + 1,
-                current_yaw,
-                target_yaw_deg,
-                error,
-                vz_cmd,
-            )
-        )
-        dog.move(last_time=0.1, vz=vz_cmd)
-        time.sleep(1)
-
-    print("YAW: max adjustment steps reached, continue with current yaw")
-    return read_current_yaw_deg()
-
-
-def rotate_to_relative_yaw_once(dog, target_yaw_deg, tolerance_deg=3.0):
-    """Check yaw once and issue at most one correction command."""
-    yaw_vz_small = 9555
-    yaw_vz_large = 10000
-
-    current_yaw = read_current_yaw_deg()
-    error = _normalize_yaw_error(target_yaw_deg, current_yaw)
-    if abs(error) <= tolerance_deg:
-        print(
-            "YAW_ONCE: within tolerance current={:.3f} target={:.3f} error={:.3f}".format(
-                current_yaw, target_yaw_deg, error
-            )
-        )
-        return current_yaw
-
-    vz_abs = yaw_vz_large if abs(error) > 30.0 else yaw_vz_small
-    vz_cmd = -vz_abs if error > 0 else vz_abs
-    print(
-        "YAW_ONCE: correct once current={:.3f} target={:.3f} error={:.3f} vz={}".format(
-            current_yaw, target_yaw_deg, error, vz_cmd
-        )
-    )
-    dog.move(last_time=0.1, vz=vz_cmd)
-    return current_yaw
 
 
 def _adjust_c_distance(dog, detector, target_m, tolerance_m, stable_need_frames, max_adjust_steps):
@@ -209,7 +105,12 @@ def task2_3(dog, detector, start_yaw_deg):
     time.sleep(0.5)
 
     print("[Task2_3] start IMU yaw adjustment")
-    final_yaw = rotate_to_relative_yaw(dog, target_yaw_deg)
+    final_yaw = correct_yaw(
+        dog,
+        target_yaw_deg,
+        max_adjust_steps=5,
+        stable_need_frames=3,
+    )
     print("[Task2_3] yaw adjusted current={:.3f}, start C centering".format(final_yaw))
 
     for step in range(max_adjust_steps):

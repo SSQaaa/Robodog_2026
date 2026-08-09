@@ -128,6 +128,61 @@ def read_imu_yaw_once(timeout_s=TASK1_WORLD_POSE_TIMEOUT_S, python_executable=No
     return ImuYaw(yaw_rad=pose.yaw_rad, yaw_deg=pose.yaw_deg)
 
 
+def read_yaw_deg(sample_count=3):
+    yaw_values = [read_imu_yaw_once().yaw_deg for _ in range(sample_count)]
+    sin_sum = sum(math.sin(math.radians(yaw)) for yaw in yaw_values)
+    cos_sum = sum(math.cos(math.radians(yaw)) for yaw in yaw_values)
+    return math.degrees(math.atan2(sin_sum, cos_sum))
+
+
+def normalize_yaw_error_deg(target_yaw_deg, current_yaw_deg):
+    error = float(target_yaw_deg) - float(current_yaw_deg)
+    while error > 180.0:
+        error -= 360.0
+    while error < -180.0:
+        error += 360.0
+    return error
+
+
+def correct_yaw(
+    dog,
+    target_yaw_deg,
+    max_adjust_steps=1,
+    tolerance_deg=3.0,
+    stable_need_frames=1,
+    sample_count=3,
+    settle_s=1.0,
+):
+    stable_count = 0
+    for step in range(1, int(max_adjust_steps) + 1):
+        current_yaw = read_yaw_deg(sample_count)
+        error = normalize_yaw_error_deg(target_yaw_deg, current_yaw)
+        if abs(error) <= float(tolerance_deg):
+            stable_count += 1
+            print(
+                "[Yaw] step={} stable={}/{} current={:.3f} target={:.3f} error={:.3f}".format(
+                    step, stable_count, stable_need_frames, current_yaw, target_yaw_deg, error
+                )
+            )
+            if stable_count >= int(stable_need_frames):
+                return current_yaw
+        else:
+            stable_count = 0
+            vz_abs = 10000 if abs(error) > 30.0 else 9555
+            vz_cmd = -vz_abs if error > 0 else vz_abs
+            print(
+                "[Yaw] step={} current={:.3f} target={:.3f} error={:.3f} vz={}".format(
+                    step, current_yaw, target_yaw_deg, error, vz_cmd
+                )
+            )
+            dog.move(last_time=0.1, vz=vz_cmd)
+        if step < int(max_adjust_steps) and settle_s > 0:
+            time.sleep(float(settle_s))
+
+    print("[Yaw] max adjustment steps reached")
+    return read_yaw_deg(sample_count)
+
+
 def project_relative_pose(start_pose, current_pose):
     dx = float(current_pose.x) - float(start_pose.x)
     dy = float(current_pose.y) - float(start_pose.y)

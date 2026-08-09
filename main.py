@@ -14,7 +14,7 @@ from tools.motion import DogControl
 from tools.run_logger import append_run_log
 from tools.vision import resolve_dashboard_status
 from tools.vision_manager import VisionManager
-from tools.world_pose import close_pose_reader
+from tools.world_pose import close_pose_reader, correct_yaw
 
 
 SHOW_TASK2_STREAM = True
@@ -98,8 +98,14 @@ def main():
             )
             print("[Main] start_yaw_deg={:.3f}".format(start_yaw_deg))
             print("[Main] task1 finished, check yaw once")
-            task2_3.rotate_to_relative_yaw_once(dog, start_yaw_deg - 90.0)
-            time.sleep(2)
+            correct_yaw(
+                dog,
+                start_yaw_deg - 90.0,
+                max_adjust_steps=1,
+                stable_need_frames=3,
+                settle_s=0.0,
+            )
+            # time.sleep(2)
 
         print("[Main] start task2")
         with measure_task(task_seconds, "task2"):
@@ -121,6 +127,8 @@ def main():
         print("[Main] reset arm before task3")
         with measure_task(task_seconds, "task3"):
             reset_arm()
+            # 稍微往右一点
+            dog.move(last_time=0.3, vy=25000)
             task3_runner = Task3(
                 status_dict=status_by_letter,
                 dog=dog,
