@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-import traceback
 import time
-from concurrent.futures import ThreadPoolExecutor
+import traceback
+from contextlib import contextmanager
 from datetime import datetime
 
 import task1
@@ -12,10 +12,20 @@ from project_config import DEFAULT_DASHBOARD_STATUS
 from task3 import Task3
 from tools.motion import DogControl
 from tools.run_logger import append_run_log
-from tools.vision import DashboardInfer, YoloDepthDetector, resolve_dashboard_status
+from tools.vision import resolve_dashboard_status
+from tools.vision_manager import VisionManager
 
 
 SHOW_TASK2_STREAM = True
+
+
+@contextmanager
+def measure_task(task_seconds, name):
+    started_at = time.perf_counter()
+    try:
+        yield
+    finally:
+        task_seconds[name] = time.perf_counter() - started_at
 
 
 def input_run_time():
@@ -23,126 +33,100 @@ def input_run_time():
         run_time = input("请输入本次运行时间（月日时分，例如 07282206）：").strip()
         try:
             datetime.strptime(run_time, "%m%d%H%M")
+            return run_time
         except ValueError:
-            print("[Main] 时间格式无效，请输入8位月日时分，例如 07282206")
-            continue
-        return run_time
+            print("[Main] 时间格式无效，请输入 8 位月日时分，例如 07282206")
 
 
 def get_task3_status(records):
-    if not records:
-        print("[Main] task2 did not return records, use default task3 status")
-        return dict(DEFAULT_DASHBOARD_STATUS)
+    if records:
+        try:
+            status = resolve_dashboard_status(records, default_status=DEFAULT_DASHBOARD_STATUS)
+            if status:
+                return status
+        except Exception:
+            traceback.print_exc()
+    print("[Main] use default task3 status")
+    return dict(DEFAULT_DASHBOARD_STATUS)
+
+
+def run_task2(dog, detector, run_errors):
     try:
-        status_by_letter = resolve_dashboard_status(records, default_status=DEFAULT_DASHBOARD_STATUS)
-    except Exception:
-        print("[Main] failed to resolve task2 records, use default task3 status")
+        return task2.run(dog, show_stream=SHOW_TASK2_STREAM, detector=detector)
+    except Exception as exc:
+        print("[Main] task2 failed, use default task3 status")
         traceback.print_exc()
-        return dict(DEFAULT_DASHBOARD_STATUS)
-    if not status_by_letter:
-        print("[Main] task2 status is empty, use default task3 status")
-        return dict(DEFAULT_DASHBOARD_STATUS)
-    return status_by_letter
+        run_errors.append("task2: {}".format(exc))
+        return None
+
+
+def close_safely(label, close_action):
+    try:
+        close_action()
+    except Exception:
+        print("[Main] failed to close {}".format(label))
+        traceback.print_exc()
+
+
+def close_dog(dog):
+    dog.stop()
+    dog.close()
 
 
 def main():
     manual_run_time = input_run_time()
-    dog = None
-    detector_executor = ThreadPoolExecutor(max_workers=1)
-    dashboard_detector = None
-    dashboard_future = None
-    task3_vision = None
-    task3_vision_future = None
-    task3_runner = None
     total_started_at = time.perf_counter()
     task_seconds = {}
     run_errors = []
     run_status = "failed"
-    active_task = None
-    task_started_at = None
-    try:
+    dog = None
+    task3_runner = None
+    vision = VisionManager(show_dashboard_stream=SHOW_TASK2_STREAM)
 
+    try:
         dog = DogControl()
         dog.stand_up()
         dog.close_continue()
         dog.stop()
 
-        # 单独运行任务三的时候解注释
-        # status_by_letter = dict(DEFAULT_DASHBOARD_STATUS)
-        # print(f"[Main] task3-only status={status_by_letter}")
-
         start_yaw_deg = task2_3.read_current_yaw_deg()
         print("[Main] start_yaw_deg={:.3f}".format(start_yaw_deg))
 
-        def initialize_task2_vision():
-            nonlocal dashboard_future
-            print("[Main] initialize task2 vision in background")
-            dashboard_future = detector_executor.submit(DashboardInfer, show_stream=SHOW_TASK2_STREAM)
-
         print("[Main] start task1")
-        active_task = "task1"
-        task_started_at = time.perf_counter()
-        task1.run(dog, on_navigation_ready=initialize_task2_vision)
-        print("[Main] task1 finished, check yaw once")
-        task2_3.rotate_to_relative_yaw_once(dog, start_yaw_deg - 90.0)
-        task_seconds["task1"] = time.perf_counter() - task_started_at
-        active_task = None
-        time.sleep(2)
-        # 换了个足端感觉没有变斜情况了
-        # dog.move(last_time=0.18, vz=10000)
+        with measure_task(task_seconds, "task1"):
+            task1.run(dog, on_navigation_ready=vision.start_dashboard)
+            print("[Main] task1 finished, check yaw once")
+            task2_3.rotate_to_relative_yaw_once(dog, start_yaw_deg - 90.0)
+            time.sleep(2)
 
         print("[Main] start task2")
-        active_task = "task2"
-        task_started_at = time.perf_counter()
-        try:
-            dashboard_detector = dashboard_future.result()
-            records = task2.run(dog, show_stream=SHOW_TASK2_STREAM, detector=dashboard_detector)
-        except Exception as exc:
-            print("[Main] task2 failed, use default task3 status")
-            traceback.print_exc()
-            run_errors.append("task2: {}".format(exc))
-            records = None
-        finally:
-            task_seconds["task2"] = time.perf_counter() - task_started_at
-            active_task = None
+        with measure_task(task_seconds, "task2"):
+            try:
+                dashboard_detector = vision.get_dashboard()
+            except Exception as exc:
+                run_errors.append("task2 vision: {}".format(exc))
+                dashboard_detector = None
+            records = run_task2(dog, dashboard_detector, run_errors) if dashboard_detector else None
         status_by_letter = get_task3_status(records)
-        print(f"[Main] task3 status={status_by_letter}")
-
-        if dashboard_detector is None:
-            print("[Main] retry task2_3 vision initialization")
-            dashboard_detector = DashboardInfer(show_stream=SHOW_TASK2_STREAM)
+        print("[Main] task3 status={}".format(status_by_letter))
 
         print("[Main] start task2_3 bridge")
-        active_task = "task2_3"
-        task_started_at = time.perf_counter()
-        task2_3.run(dog, start_yaw_deg=start_yaw_deg, detector=dashboard_detector)
-        task_seconds["task2_3"] = time.perf_counter() - task_started_at
-        active_task = None
-        dashboard_detector.close()
-        dashboard_detector = None
-        dashboard_future = None
-        print("[Main] task2/task2_3 detector closed")
-
-        print("[Main] initialize task3 vision in background")
-        task3_vision = YoloDepthDetector()
-        task3_vision_future = detector_executor.submit(task3_vision.start)
-        # time.sleep(2)
+        with measure_task(task_seconds, "task2_3"):
+            task2_3.run(dog, start_yaw_deg=start_yaw_deg, detector=vision.get_dashboard(retry=True))
+        print("[Main] keep task2/task2_3 detector for task3")
         dog.revolve_180()
-        # time.sleep(2)
 
         print("[Main] reset arm before task3")
-        active_task = "task3"
-        task_started_at = time.perf_counter()
-        reset_arm()
-        task3_vision_future.result()
-        task3_runner = Task3(status_dict=status_by_letter, dog=dog, vision=task3_vision)
-        task3_vision = None
-        task3_vision_future = None
-        print("[Main] start task3")
-        task3_runner.start()
-        task3_runner.run()
-        task_seconds["task3"] = time.perf_counter() - task_started_at
-        active_task = None
+        with measure_task(task_seconds, "task3"):
+            reset_arm()
+            task3_runner = Task3(
+                status_dict=status_by_letter,
+                dog=dog,
+                vision=vision.take_task3(),
+            )
+            print("[Main] start task3")
+            task3_runner.start()
+            task3_runner.run()
 
         print("[Main] all tasks finished")
         run_status = "completed_with_errors" if run_errors else "completed"
@@ -154,50 +138,21 @@ def main():
             dog.stop()
         raise
     finally:
-        if active_task is not None and active_task not in task_seconds:
-            task_seconds[active_task] = time.perf_counter() - task_started_at
-        detector_executor.shutdown(wait=True)
-        if dashboard_detector is None and dashboard_future is not None:
-            try:
-                dashboard_detector = dashboard_future.result()
-            except Exception:
-                dashboard_detector = None
-        if dashboard_detector is not None:
-            try:
-                dashboard_detector.close()
-            except Exception:
-                print("[Main] failed to close task2 detector")
-                traceback.print_exc()
-        if task3_vision is not None:
-            try:
-                task3_vision.stop()
-            except Exception:
-                print("[Main] failed to close task3 vision")
-                traceback.print_exc()
+        close_safely("vision manager", vision.close)
         if task3_runner is not None:
-            try:
-                task3_runner.close()
-            except Exception:
-                print("[Main] failed to close task3 runner")
-                traceback.print_exc()
+            close_safely("task3 runner", task3_runner.close)
         if dog is not None:
-            try:
-                dog.stop()
-                dog.close()
-            except Exception:
-                print("[Main] failed to close dog control")
-                traceback.print_exc()
-        try:
-            append_run_log(
+            close_safely("dog control", lambda: close_dog(dog))
+        close_safely(
+            "run logger",
+            lambda: append_run_log(
                 task_seconds=task_seconds,
                 total_seconds=time.perf_counter() - total_started_at,
                 status=run_status,
                 errors=run_errors,
                 run_time=manual_run_time,
-            )
-        except Exception:
-            print("[Timing] failed to save run log")
-            traceback.print_exc()
+            ),
+        )
 
 
 if __name__ == "__main__":

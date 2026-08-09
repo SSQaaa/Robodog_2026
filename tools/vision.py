@@ -367,12 +367,19 @@ class YoloDepthDetector:
 
 
 class DashboardInfer:
-    def __init__(self, show_stream=False, conf_thresh=CONF_THRESH, min_valid_depth_count=MIN_VALID_DEPTH_COUNT):
+    def __init__(
+        self,
+        show_stream=False,
+        conf_thresh=CONF_THRESH,
+        min_valid_depth_count=MIN_VALID_DEPTH_COUNT,
+        task3_conf_thresh=0.4,
+    ):
         import orbbec_native
 
         yolov5_trt_cpp = load_yolo_runtime()
         self.show_stream = bool(show_stream)
         self.conf_thresh = float(conf_thresh)
+        self.task3_conf_thresh = float(task3_conf_thresh)
         self.min_valid_depth_count = int(min_valid_depth_count)
         self.detector = yolov5_trt_cpp.Yolov5TRT(ENGINE_PATH)
         self.cam = orbbec_native.OrbbecCamera()
@@ -380,6 +387,8 @@ class DashboardInfer:
         time.sleep(0.8)
         self.depth_w, self.depth_h = self.cam.get_depth_size()
         self.color_w, self.color_h = self.cam.get_color_size()
+        self.color_intrinsics = self.cam.get_color_intrinsics()
+        self.depth_intrinsics = self.cam.get_depth_intrinsics()
         self.infer_frame_index = 0
 
     def infer_once(self):
@@ -414,6 +423,61 @@ class DashboardInfer:
             self._show_infer_frame(output)
         return output
 
+    def detect(self):
+        """使用同一摄像头和模型返回 Task3 所需的 Detection 对象。"""
+        frame = self.cam.get_color_frame()
+        if frame is None:
+            return None, []
+        frame = np.asarray(frame, dtype=np.uint8).copy()
+        color_h, color_w = frame.shape[:2]
+        detections = []
+        for raw in self.detector.detect(frame):
+            cx, cy, w, h, conf, cls_id = raw
+            if float(conf) < self.task3_conf_thresh:
+                continue
+            class_id = int(cls_id)
+            color_box = yolo_to_xyxy((cx, cy, w, h), img_w=color_w, img_h=color_h)
+            depth_box = scale_box(
+                color_box,
+                src_size=(color_w, color_h),
+                dst_size=(self.depth_w, self.depth_h),
+            )
+            depth_mm, valid_count = self.cam.get_depth_in_box(*depth_box)
+            current_depth = (
+                int(depth_mm)
+                if depth_mm > 0 and valid_count >= self.min_valid_depth_count
+                else None
+            )
+            position_3d = None
+            if current_depth is not None:
+                u_depth = (depth_box[0] + depth_box[2]) // 2
+                v_depth = depth_box[3]
+                position_3d = pixel_to_camera_3d(
+                    u_depth,
+                    v_depth,
+                    current_depth,
+                    float(self.depth_intrinsics["fx"]),
+                    float(self.depth_intrinsics["fy"]),
+                    float(self.depth_intrinsics["cx"]),
+                    float(self.depth_intrinsics["cy"]),
+                )
+            x1, y1, x2, y2 = color_box
+            detections.append(
+                Detection(
+                    class_id=class_id,
+                    class_name=CLASS_NAMES.get(class_id, "id{}".format(class_id)),
+                    conf=float(conf),
+                    box=tuple(color_box),
+                    depth_box=tuple(depth_box),
+                    center=((x1 + x2) * 0.5, (y1 + y2) * 0.5),
+                    depth_mm=current_depth,
+                    distance_m=None if current_depth is None else current_depth / 1000.0,
+                    valid_count=int(valid_count),
+                    position_3d=position_3d,
+                )
+            )
+        return frame, detections
+
     def _show_infer_frame(self, infer_output):
         image_raw = infer_output["image_raw"]
         if image_raw is None:
@@ -429,10 +493,13 @@ class DashboardInfer:
         cv2.imshow("dashboard_detector", display)
         cv2.waitKey(1)
 
-    def close(self):
+    def stop(self):
         self.cam.stop()
         if self.show_stream:
             cv2.destroyAllWindows()
+
+    def close(self):
+        self.stop()
 
 
 def analyze_infer_values(image_raw, detections, infer_ms=0.0):
