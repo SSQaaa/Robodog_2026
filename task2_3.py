@@ -1,12 +1,9 @@
 # -*- coding: utf-8 -*-
 import math
-import os
-import re
-import subprocess
 import time
 
-from project_config import PROJECT_DIR, TASK1_WORLD_POSE_PYTHON
 from tools.vision import DashboardInfer
+from tools.world_pose import read_imu_yaw_once
 
 
 def _pick_best_by_class(detections, class_id):
@@ -48,25 +45,11 @@ def _average_yaw_deg(yaw_list):
     return math.degrees(math.atan2(sin_sum, cos_sum))
 
 
-def read_current_yaw_deg(sample_count=3, python_executable=TASK1_WORLD_POSE_PYTHON):
-    script_path = os.path.join(PROJECT_DIR, "task2", "tasks", "read_ros_imu_yaw.py")
+def read_current_yaw_deg(sample_count=3):
     yaw_list = []
 
     for _ in range(sample_count):
-        output = subprocess.check_output(
-            [python_executable, script_path, "--once"],
-            stderr=subprocess.STDOUT,
-            timeout=8,
-        )
-        if not isinstance(output, str):
-            output = output.decode("utf-8", errors="replace")
-
-        match = re.search(r"yaw=([-+]?\d+\.?\d*)", output)
-        if match is None:
-            print(output)
-            raise RuntimeError("cannot parse IMU yaw output")
-
-        yaw_list.append(float(match.group(1)))
+        yaw_list.append(read_imu_yaw_once().yaw_deg)
         time.sleep(0.05)
 
     return _average_yaw_deg(yaw_list)

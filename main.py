@@ -14,6 +14,7 @@ from tools.motion import DogControl
 from tools.run_logger import append_run_log
 from tools.vision import resolve_dashboard_status
 from tools.vision_manager import VisionManager
+from tools.world_pose import close_pose_reader
 
 
 SHOW_TASK2_STREAM = True
@@ -89,16 +90,13 @@ def main():
         dog.close_continue()
         dog.stop()
 
-        start_yaw_deg = task2_3.read_current_yaw_deg()
-        print("[Main] start_yaw_deg={:.3f}".format(start_yaw_deg))
-
         print("[Main] start task1")
         with measure_task(task_seconds, "task1"):
-            task1.run(
+            start_yaw_deg = task1.run(
                 dog,
                 on_navigation_ready=vision.start_dashboard,
-                start_yaw_deg=start_yaw_deg,
             )
+            print("[Main] start_yaw_deg={:.3f}".format(start_yaw_deg))
             print("[Main] task1 finished, check yaw once")
             task2_3.rotate_to_relative_yaw_once(dog, start_yaw_deg - 90.0)
             time.sleep(2)
@@ -143,6 +141,7 @@ def main():
         raise
     finally:
         close_safely("vision manager", vision.close)
+        close_safely("ROS pose reader", close_pose_reader)
         if task3_runner is not None:
             close_safely("task3 runner", task3_runner.close)
         if dog is not None:

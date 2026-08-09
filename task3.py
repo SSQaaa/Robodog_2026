@@ -82,6 +82,10 @@ class Task3:
             print("[TASK3] no abnormal red block to pick")
             return
 
+        print("[TASK3] first entry, move forward until red block is near")
+        self.move_forward_until_red()
+        time.sleep(0.5)
+
         for index, letter in enumerate(abnormal_letters):
             self.run_single_transfer(
                 letter,
@@ -165,7 +169,7 @@ class Task3:
                     "stop moving forward"
                 )
                 break
-            step_seconds = min(0.3, RETURN_FORWARD_SECONDS - moved_seconds)
+            step_seconds = min(0.6, RETURN_FORWARD_SECONDS - moved_seconds)
             self.dog.move(vx=FORWARD_SPEED, last_time=step_seconds)
             moved_seconds += step_seconds
         else:

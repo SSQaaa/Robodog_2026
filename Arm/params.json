@@ -158,7 +158,7 @@
       }
     },
     "gripper": {
-      "open": 1900,
+      "open": 1700,
       "close": 2200,
       "current_limit_units": 80,
       "current_ma_per_unit": 6.5,

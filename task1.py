@@ -94,6 +94,16 @@ def current_plan_pose_m(start_world_pose):
     return current_x, current_y
 
 
+def read_start_world_pose(sample_count=3):
+    poses = [read_world_pose_once() for _ in range(sample_count)]
+    sin_sum = sum(math.sin(pose.yaw_rad) for pose in poses)
+    cos_sum = sum(math.cos(pose.yaw_rad) for pose in poses)
+    latest = poses[-1]
+    latest.yaw_rad = math.atan2(sin_sum, cos_sum)
+    latest.yaw_deg = math.degrees(latest.yaw_rad)
+    return latest
+
+
 def normalize_angle_rad(angle):
     while angle > math.pi:
         angle -= 2.0 * math.pi
@@ -131,7 +141,7 @@ def lock_plan_frame_to_start_pose(world_pose):
 # 根据规划结果在xy轴移动
 def drive_axis_segment(dog: DogControl, axis, distance_m):
     distance_m = float(distance_m)
-    if abs(distance_m) <= WAYPOINT_TOLERANCE_M:
+    if abs(distance_m) <= WAYPOINT_TOLERANCE_M + 1e-9:
         return False
 
     if axis == "x":
@@ -221,24 +231,37 @@ def execute_path(dog: DogControl, waypoints_m, start_world_pose, on_first_move=N
         planned_dy = target_y - prev_y
         axis = "x" if abs(planned_dx) >= abs(planned_dy) else "y"
 
-        distance_m = planned_dx if axis == "x" else planned_dy
+        if index == 1:
+            error_x = planned_dx
+            error_y = planned_dy
+            source = "manual start"
+        else:
+            current_x, current_y = current_plan_pose_m(start_world_pose)
+            error_x = target_x - current_x
+            error_y = target_y - current_y
+            source = "world pose ({:.3f}, {:.3f})".format(current_x, current_y)
 
         print(
-            "[Task1] segment {} axis={} target=({:.3f}, {:.3f}) planned=({:.3f}, {:.3f})".format(
+            "[Task1] segment {} axis={} target=({:.3f}, {:.3f}) actual_error=({:.3f}, {:.3f}) from {}".format(
                 index,
                 axis,
                 target_x,
                 target_y,
-                planned_dx,
-                planned_dy,
+                error_x,
+                error_y,
+                source,
             )
         )
-        if abs(distance_m) <= WAYPOINT_TOLERANCE_M:
-            print("[Task1] segment {} within tolerance, skip move and pose check".format(index))
+        if (
+            abs(error_x) <= WAYPOINT_TOLERANCE_M + 1e-9
+            and abs(error_y) <= WAYPOINT_TOLERANCE_M + 1e-9
+        ):
+            print("[Task1] segment {} actual position within tolerance, skip move".format(index))
             continue
         if on_first_move is not None:
             on_first_move()
             on_first_move = None
+        distance_m = error_x if axis == "x" else error_y
         drive_axis_segment(dog, axis, distance_m)
         if axis == "y":
             correct_y_to_target(dog, start_world_pose, target_y)
@@ -248,15 +271,12 @@ def execute_path(dog: DogControl, waypoints_m, start_world_pose, on_first_move=N
             correct_y_to_target(dog, start_world_pose, target_y)
 
 
-def run(dog: DogControl, plan_path=PLAN_PATH, on_navigation_ready=None, start_yaw_deg=None):
+def run(dog: DogControl, plan_path=PLAN_PATH, on_navigation_ready=None):
     print("[Task1] DogControl class from {}.{}".format(dog.__class__.__module__, dog.__class__.__name__))
     print("[Task1] loading path plan: {}".format(os.path.abspath(plan_path)))
     plan_data = load_path_plan_data(plan_path)
     waypoints_m = [(float(x) / 1000.0, float(y) / 1000.0) for x, y in plan_data["waypoints_mm"]]
-    start_world_pose = read_world_pose_once()
-    if start_yaw_deg is not None:
-        start_world_pose.yaw_deg = float(start_yaw_deg)
-        start_world_pose.yaw_rad = math.radians(start_world_pose.yaw_deg)
+    start_world_pose = read_start_world_pose(sample_count=3)
     lock_plan_frame_to_start_pose(start_world_pose)
     print(
         "[Task1] start world pose x={:.3f} y={:.3f} yaw={:.3f}rad/{:.2f}deg maps to plan=({:.3f}, {:.3f})m".format(
@@ -278,3 +298,4 @@ def run(dog: DogControl, plan_path=PLAN_PATH, on_navigation_ready=None, start_ya
         print("[Task1][Stop] task1 finally")
         dog.stop()
         time.sleep(0.2)
+    return start_world_pose.yaw_deg

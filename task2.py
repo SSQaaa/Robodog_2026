@@ -207,7 +207,7 @@ def _run_single_dashboard_with_detector(
 
             if letter_missing_count >= 3:
                 print("D{} LETTER_PRECHECK: 连续3次未识别到字母，后退一点".format(dashboard_index))
-                dog.move(last_time=0.10, vx=-10000)
+                dog.move(last_time=0.10, vx=-20000)
                 letter_missing_count = 0
                 time.sleep(0.5)
             continue
@@ -252,7 +252,7 @@ def _run_single_dashboard_with_detector(
 
                 if letter_det is None or letter_det["distance_m"] is None:
                     print("D{} LETTER_DISTANCE: 等待后仍然深度无效，后退一点".format(dashboard_index))
-                    dog.move(last_time=0.10, vx=-10000)
+                    dog.move(last_time=0.10, vx=-20000)
                     time.sleep(0.5)
                     continue
 
@@ -263,8 +263,8 @@ def _run_single_dashboard_with_detector(
                 print("D{} LETTER_DISTANCE: 距离通过，字母阶段完成，letter={} x={:.1f} d={:.3f}m".format(dashboard_index, letter, letter_x_center, letter_distance_m))
                 break
 
-            if abs(letter_error_m) > 0.20:
-                letter_vx_abs = 10000
+            if abs(letter_error_m) > 0.30:
+                letter_vx_abs = 20000
             elif abs(letter_error_m) > 0.10:
                 letter_vx_abs = 7500
             else:
@@ -457,7 +457,7 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         dog.UPDOWN()
         time.sleep(0.5)
-        dog.move(last_time=4.5, vy=-25000)
+        dog.move(last_time=5.0, vy=-25000)
         time.sleep(0.5)
         dog.move(last_time=2.3, vx=20000)
         time.sleep(0.5)
