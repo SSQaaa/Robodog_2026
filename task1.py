@@ -6,7 +6,7 @@ import time
 
 from project_config import PROJECT_DIR
 from tools.motion import DogControl
-from tools.world_pose import read_imu_yaw_once, read_world_pose_once
+from tools.world_pose import read_world_pose_once
 
 
 PLAN_PATH = os.path.join(PROJECT_DIR, "tools", "task1_path_plan.json")
@@ -75,7 +75,6 @@ def load_path_plan(path=PLAN_PATH):
 # 计算当前在路径规划坐标系下的位置，单位m
 def current_plan_pose_with_yaw_m(start_world_pose):
     current_world_pose = read_world_pose_once()
-    current_imu_yaw = read_imu_yaw_once()
     world_dx = float(current_world_pose.x) - float(start_world_pose.x)
     world_dy = float(current_world_pose.y) - float(start_world_pose.y)
     yaw = plan_world_yaw_rad(start_world_pose)
@@ -85,8 +84,8 @@ def current_plan_pose_with_yaw_m(start_world_pose):
     return (
         START_PLAN_X_M + plan_dx,
         START_PLAN_Y_M + plan_dy,
-        current_imu_yaw.yaw_rad,
-        current_imu_yaw.yaw_deg,
+        current_world_pose.yaw_rad,
+        current_world_pose.yaw_deg,
     )
 
 
@@ -133,7 +132,7 @@ def lock_plan_frame_to_start_pose(world_pose):
 def drive_axis_segment(dog: DogControl, axis, distance_m):
     distance_m = float(distance_m)
     if abs(distance_m) <= WAYPOINT_TOLERANCE_M:
-        return
+        return False
 
     if axis == "x":
         speed_mps = FORWARD_SPEED_MPS
@@ -142,7 +141,7 @@ def drive_axis_segment(dog: DogControl, axis, distance_m):
         last_time = abs(distance_m) / speed_mps
         print("[Task1][Move] x distance={:.3f}m vx={} time={:.2f}s".format(distance_m, command, last_time))
         dog.move(vx=command, last_time=last_time, duration=MOVE_SETTLE_S)
-        return
+        return True
 
     if axis == "y":
         speed_mps = LATERAL_SPEED_MPS
@@ -166,7 +165,7 @@ def drive_axis_segment(dog: DogControl, axis, distance_m):
                     step_time,
                 )
             )
-        return
+        return True
 
     raise ValueError("unsupported axis: {}".format(axis))
 
@@ -176,7 +175,7 @@ def correct_x_to_target(dog: DogControl, start_world_pose, target_x_m):
         current_x, current_y, yaw_rad, yaw_deg = current_plan_pose_with_yaw_m(start_world_pose)
         error_x = float(target_x_m) - current_x
         print(
-            "[Task1][CorrectX] current=({:.3f}, {:.3f}) imu_yaw={:.3f}rad/{:.2f}deg target_x={:.3f} error_x={:.3f}".format(
+            "[Task1][CorrectX] current=({:.3f}, {:.3f}) yaw={:.3f}rad/{:.2f}deg target_x={:.3f} error_x={:.3f}".format(
                 current_x, current_y, yaw_rad, yaw_deg, target_x_m, error_x
             )
         )
@@ -194,7 +193,7 @@ def correct_y_to_target(dog: DogControl, start_world_pose, target_y_m):
         current_x, current_y, yaw_rad, yaw_deg = current_plan_pose_with_yaw_m(start_world_pose)
         error_y = float(target_y_m) - current_y
         print(
-            "[Task1][CorrectY] current=({:.3f}, {:.3f}) imu_yaw={:.3f}rad/{:.2f}deg target_y={:.3f} error_y={:.3f}".format(
+            "[Task1][CorrectY] current=({:.3f}, {:.3f}) yaw={:.3f}rad/{:.2f}deg target_y={:.3f} error_y={:.3f}".format(
                 current_x, current_y, yaw_rad, yaw_deg, target_y_m, error_y
             )
         )
@@ -222,26 +221,21 @@ def execute_path(dog: DogControl, waypoints_m, start_world_pose, on_first_move=N
         planned_dy = target_y - prev_y
         axis = "x" if abs(planned_dx) >= abs(planned_dy) else "y"
 
-        current_x, current_y, yaw_rad, yaw_deg = current_plan_pose_with_yaw_m(start_world_pose)
-        if axis == "x":
-            distance_m = target_x - current_x
-        else:
-            distance_m = target_y - current_y
+        distance_m = planned_dx if axis == "x" else planned_dy
 
         print(
-            "[Task1] segment {} axis={} current=({:.3f}, {:.3f}) imu_yaw={:.3f}rad/{:.2f}deg target=({:.3f}, {:.3f}) error=({:.3f}, {:.3f})".format(
+            "[Task1] segment {} axis={} target=({:.3f}, {:.3f}) planned=({:.3f}, {:.3f})".format(
                 index,
                 axis,
-                current_x,
-                current_y,
-                yaw_rad,
-                yaw_deg,
                 target_x,
                 target_y,
-                target_x - current_x,
-                target_y - current_y,
+                planned_dx,
+                planned_dy,
             )
         )
+        if abs(distance_m) <= WAYPOINT_TOLERANCE_M:
+            print("[Task1] segment {} within tolerance, skip move and pose check".format(index))
+            continue
         if on_first_move is not None:
             on_first_move()
             on_first_move = None
@@ -254,15 +248,15 @@ def execute_path(dog: DogControl, waypoints_m, start_world_pose, on_first_move=N
             correct_y_to_target(dog, start_world_pose, target_y)
 
 
-def run(dog: DogControl, plan_path=PLAN_PATH, on_navigation_ready=None):
+def run(dog: DogControl, plan_path=PLAN_PATH, on_navigation_ready=None, start_yaw_deg=None):
     print("[Task1] DogControl class from {}.{}".format(dog.__class__.__module__, dog.__class__.__name__))
     print("[Task1] loading path plan: {}".format(os.path.abspath(plan_path)))
     plan_data = load_path_plan_data(plan_path)
     waypoints_m = [(float(x) / 1000.0, float(y) / 1000.0) for x, y in plan_data["waypoints_mm"]]
     start_world_pose = read_world_pose_once()
-    start_imu_yaw = read_imu_yaw_once()
-    start_world_pose.yaw_rad = start_imu_yaw.yaw_rad
-    start_world_pose.yaw_deg = start_imu_yaw.yaw_deg
+    if start_yaw_deg is not None:
+        start_world_pose.yaw_deg = float(start_yaw_deg)
+        start_world_pose.yaw_rad = math.radians(start_world_pose.yaw_deg)
     lock_plan_frame_to_start_pose(start_world_pose)
     print(
         "[Task1] start world pose x={:.3f} y={:.3f} yaw={:.3f}rad/{:.2f}deg maps to plan=({:.3f}, {:.3f})m".format(

@@ -94,7 +94,11 @@ def main():
 
         print("[Main] start task1")
         with measure_task(task_seconds, "task1"):
-            task1.run(dog, on_navigation_ready=vision.start_dashboard)
+            task1.run(
+                dog,
+                on_navigation_ready=vision.start_dashboard,
+                start_yaw_deg=start_yaw_deg,
+            )
             print("[Main] task1 finished, check yaw once")
             task2_3.rotate_to_relative_yaw_once(dog, start_yaw_deg - 90.0)
             time.sleep(2)

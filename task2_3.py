@@ -72,9 +72,8 @@ def read_current_yaw_deg(sample_count=3, python_executable=TASK1_WORLD_POSE_PYTH
     return _average_yaw_deg(yaw_list)
 
 
-def rotate_to_relative_yaw(dog, target_yaw_deg, tolerance_deg=3.0):
+def rotate_to_relative_yaw(dog, target_yaw_deg, tolerance_deg=3.0, max_adjust_steps=3):
     stable_need_frames = 3
-    max_adjust_steps = 40
     yaw_vz_small = 9555
     yaw_vz_large = 10000
     stable_count = 0
