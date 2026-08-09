@@ -266,7 +266,7 @@ def _run_single_dashboard_with_detector(
             if abs(letter_error_m) > 0.30:
                 letter_vx_abs = 20000
             elif abs(letter_error_m) > 0.10:
-                letter_vx_abs = 7500
+                letter_vx_abs = 10000
             else:
                 letter_vx_abs = 7000
 
@@ -495,12 +495,13 @@ def task2_new(dog, detector, show_stream=False):
         time.sleep(0.5)
         yaw_before_turn = read_yaw_deg()
         dog.revolve_90_r()
-        time.sleep(0.5)
+        time.sleep(2.0)
         correct_yaw(
             dog,
             yaw_before_turn - 90.0,
             max_adjust_steps=1,
-            stable_need_frames=3,
+            stable_need_frames=1,
+            sample_count=3,
             settle_s=0.0,
         )
         # 换了个足端感觉没有变斜情况了

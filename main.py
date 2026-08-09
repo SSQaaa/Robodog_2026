@@ -17,7 +17,7 @@ from tools.vision_manager import VisionManager
 from tools.world_pose import close_pose_reader, correct_yaw
 
 
-SHOW_TASK2_STREAM = True
+SHOW_TASK2_STREAM = False
 
 
 @contextmanager
@@ -102,7 +102,8 @@ def main():
                 dog,
                 start_yaw_deg - 90.0,
                 max_adjust_steps=1,
-                stable_need_frames=3,
+                stable_need_frames=1,
+                sample_count=3,
                 settle_s=0.0,
             )
             # time.sleep(2)

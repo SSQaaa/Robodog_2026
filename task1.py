@@ -18,13 +18,19 @@ FINISH_PLAN_Y_M = 0.75
 PLAN_LATERAL_SIGN = -1.0
 
 FORWARD_VX = 20000
-FORWARD_SPEED_MPS = 0.6
+FORWARD_SPEED_MPS = 0.5
 
 LATERAL_VY = 25000
-LATERAL_SPEED_MPS = 0.12
+LATERAL_SPEED_MPS = 0.25
+
+DIAGONAL_VX = 20000
+DIAGONAL_VY = 25000
+DIAGONAL_X_SPEED_MPS = 0.40
+DIAGONAL_Y_SPEED_MPS = 0.15
+DIAGONAL_MIN_TIME_S = 1.0
 
 X_CORRECT_VX = 10000
-X_CORRECT_SPEED_MPS = 0.3
+X_CORRECT_SPEED_MPS = 0.4
 MOVE_SETTLE_S = 0.50
 
 WAYPOINT_TOLERANCE_M = 0.10
@@ -179,6 +185,30 @@ def drive_axis_segment(dog: DogControl, axis, distance_m):
 
     raise ValueError("unsupported axis: {}".format(axis))
 
+
+def drive_diagonal_segment(dog: DogControl, error_x_m, error_y_m, planned_dx, planned_dy):
+    """Move along the measured 8:3 diagonal, leaving final X/Y alignment to corrections."""
+    if error_x_m * planned_dx <= 0 or error_y_m * planned_dy <= 0:
+        return False
+
+    move_time = min(
+        abs(error_x_m) / DIAGONAL_X_SPEED_MPS,
+        abs(error_y_m) / DIAGONAL_Y_SPEED_MPS,
+    )
+    if move_time < DIAGONAL_MIN_TIME_S:
+        return False
+
+    vx = DIAGONAL_VX if planned_dx > 0 else -DIAGONAL_VX
+    vy = DIAGONAL_VY if planned_dy > 0 else -DIAGONAL_VY
+    print(
+        "[Task1][Move] diagonal error=({:.3f}, {:.3f})m vx={} vy={} time={:.2f}s".format(
+            error_x_m, error_y_m, vx, vy, move_time
+        )
+    )
+    dog.move(vx=vx, vy=vy, last_time=move_time, duration=MOVE_SETTLE_S)
+    dog.stop()
+    return True
+
 # 修正因为左右平移带来的x轴误差，单位m
 def correct_x_to_target(dog: DogControl, start_world_pose, target_x_m):
     while True:
@@ -229,7 +259,8 @@ def execute_path(dog: DogControl, waypoints_m, start_world_pose, on_first_move=N
         prev_x, prev_y = waypoints_m[index - 1]
         planned_dx = target_x - prev_x
         planned_dy = target_y - prev_y
-        axis = "x" if abs(planned_dx) >= abs(planned_dy) else "y"
+        is_diagonal = abs(planned_dx) > 1e-9 and abs(planned_dy) > 1e-9
+        axis = "diagonal" if is_diagonal else ("x" if abs(planned_dx) >= abs(planned_dy) else "y")
 
         if index == 1:
             error_x = planned_dx
@@ -261,12 +292,16 @@ def execute_path(dog: DogControl, waypoints_m, start_world_pose, on_first_move=N
         if on_first_move is not None:
             on_first_move()
             on_first_move = None
-        distance_m = error_x if axis == "x" else error_y
-        drive_axis_segment(dog, axis, distance_m)
-        if axis == "y":
+        if is_diagonal:
+            drive_diagonal_segment(dog, error_x, error_y, planned_dx, planned_dy)
+            correct_x_to_target(dog, start_world_pose, target_x)
+            correct_y_to_target(dog, start_world_pose, target_y)
+        elif axis == "y":
+            drive_axis_segment(dog, axis, error_y)
             correct_y_to_target(dog, start_world_pose, target_y)
             correct_x_to_target(dog, start_world_pose, target_x)
         else:
+            drive_axis_segment(dog, axis, error_x)
             correct_x_to_target(dog, start_world_pose, target_x)
             correct_y_to_target(dog, start_world_pose, target_y)
 

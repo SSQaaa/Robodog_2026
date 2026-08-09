@@ -90,7 +90,7 @@ class DogControl:
             pass
 
     def stand_up(self):
-        self._send(DogCommand.STAND_UP, duration=0.1)
+        self._send(DogCommand.STAND_UP, duration=3.0)
 
     def move(self, last_time: float = 0, vx: int = 0, vy: int = 0, vz: int = 0, duration: float = 0.0) -> None:
         self._send(DogCommand.MOVE_MODE)

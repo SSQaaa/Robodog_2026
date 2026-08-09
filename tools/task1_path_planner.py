@@ -2,6 +2,10 @@
 """
 Task1 cone path planner.
 
+The search can use horizontal/vertical motion and the measured diagonal
+motion.  The first and last segment stay horizontal/vertical so the
+robot can align with the start and finish points in the usual way.
+
 Coordinate system, unit: millimetres
 - x: forward direction in the plan frame, from corridor entrance to exit.
 - y: right direction in the plan frame, across the corridor width.
@@ -63,6 +67,21 @@ CAM_ON_ROBOT_Y_M = 0.0
 # 锥桶四周的默认安全距离，单位：毫米。
 CONE_CLEARANCE_MM = 100
 
+# Measured with dog.move(vx=20000, vy=25000): one second moves about
+# 400 mm in plan x and 150 mm in plan y. Diagonal endpoints are rounded to
+# the nearest 50 mm planning cell; final point alignment handles that small
+# discretisation error.
+GRID_STEP_MM = 50
+DIAGONAL_TIME_STEP_S = 0.2
+DIAGONAL_MIN_TIME_S = 1.0
+FORWARD_SPEED_MM_S = 500.0
+LATERAL_SPEED_MM_S = 250.0
+DIAGONAL_X_SPEED_MM_S = 400.0
+DIAGONAL_Y_SPEED_MM_S = 150.0
+TURN_PENALTY_S = 0.15
+AXIS_STEP_CELLS = 1
+HEURISTIC_WEIGHT = 1.0
+
 
 @dataclass(frozen=True)
 class Rect:
@@ -121,7 +140,7 @@ class CorridorPlanner:
         robot_w_mm: int = 400,
         cone_w_mm: int = 320,
         cone_l_mm: int = 320,
-        grid_step_mm: int = 50,
+        grid_step_mm: int = GRID_STEP_MM,
         clearance_mm: int = CONE_CLEARANCE_MM,
         start_mm: Point = TASK1_START_MM,
         finish_mm: Point = TASK1_FINISH_MM,
@@ -200,7 +219,7 @@ class CorridorPlanner:
         if start in blocked or goal in blocked:
             return None
 
-        path_grid = astar_min_turns(start, goal, blocked, self.grid_bounds())
+        path_grid = astar_measured_diagonal(start, goal, blocked, self.grid_bounds())
         if path_grid is None:
             return None
         return [self.grid_to_mm(point) for point in simplify_grid_path(path_grid)]
@@ -235,61 +254,124 @@ class CorridorPlanner:
         return (point[0] * self.grid_step, point[1] * self.grid_step)
 
 
-def astar_min_turns(
+def astar_measured_diagonal(
     start: GridPoint,
     goal: GridPoint,
     blocked: set[GridPoint],
     bounds: Tuple[int, int, int, int],
 ) -> Optional[List[GridPoint]]:
+    """Find a short collision-free path using the measured diagonal step.
+
+    Cost is estimated movement time plus a small turn penalty.  This makes a
+    diagonal useful for avoiding an obstacle while moving forward, instead of
+    creating unnecessary diagonal zigzags, and avoids slow pure-Y movement.
+    """
     min_gx, max_gx, min_gy, max_gy = bounds
     start_state = (start, None)
-    open_heap: List[Tuple[int, int, int, GridPoint, Optional[GridPoint]]] = []
-    heapq.heappush(open_heap, (0, 0, manhattan(start, goal), start, None))
+    open_heap: List[Tuple[float, float, int, int, GridPoint, Optional[GridPoint]]] = []
+    push_order = 0
+    heapq.heappush(open_heap, (HEURISTIC_WEIGHT * time_heuristic(start, goal), 0.0, 0, push_order, start, None))
 
     came_from: Dict[Tuple[GridPoint, Optional[GridPoint]], Tuple[GridPoint, Optional[GridPoint]]] = {}
-    best_cost: Dict[Tuple[GridPoint, Optional[GridPoint]], Tuple[int, int]] = {start_state: (0, 0)}
+    best_cost: Dict[Tuple[GridPoint, Optional[GridPoint]], Tuple[float, int]] = {start_state: (0.0, 0)}
     best_goal_state: Optional[Tuple[GridPoint, Optional[GridPoint]]] = None
 
     while open_heap:
-        turns, steps, _, current, direction = heapq.heappop(open_heap)
+        _, distance_cost, turns, _, current, direction = heapq.heappop(open_heap)
         state = (current, direction)
-        if (turns, steps) != best_cost[current, direction]:
+        if (distance_cost, turns) != best_cost[state]:
             continue
         if current == goal:
             best_goal_state = state
             break
 
-        for nxt, next_direction in neighbours_4_with_direction(current):
+        for nxt, next_direction, is_diagonal in motion_neighbours(current):
             gx, gy = nxt
-            if gx < min_gx or gx > max_gx or gy < min_gy or gy > max_gy or nxt in blocked:
+            if gx < min_gx or gx > max_gx or gy < min_gy or gy > max_gy:
                 continue
+            # Start/finish alignment remains horizontal or vertical.  The
+            # diagonal is used only for the obstacle-avoidance part between
+            # those alignment legs.
+            if is_diagonal and (current == start or nxt == goal):
+                continue
+            if not segment_is_clear(current, nxt, blocked):
+                continue
+
             next_turns = turns
             if direction is not None and next_direction != direction:
                 next_turns += 1
-            next_steps = steps + 1
+            step_time = motion_time_s(current, nxt, is_diagonal)
+            turn_cost = TURN_PENALTY_S if direction is not None and next_direction != direction else 0.0
+            next_distance_cost = distance_cost + step_time + turn_cost
             next_state = (nxt, next_direction)
-            next_cost = (next_turns, next_steps)
-            if next_cost >= best_cost.get(next_state, (10**9, 10**9)):
+            next_cost = (next_distance_cost, next_turns)
+            if next_cost >= best_cost.get(next_state, (float("inf"), 10**9)):
                 continue
             came_from[next_state] = state
             best_cost[next_state] = next_cost
-            heapq.heappush(open_heap, (next_turns, next_steps, manhattan(nxt, goal), nxt, next_direction))
+            push_order += 1
+            estimated_total = next_distance_cost + HEURISTIC_WEIGHT * time_heuristic(nxt, goal)
+            heapq.heappush(
+                open_heap,
+                (estimated_total, next_distance_cost, next_turns, push_order, nxt, next_direction),
+            )
 
     if best_goal_state is None:
         return None
     return reconstruct_state_path(came_from, best_goal_state)
 
 
-def neighbours_4_with_direction(point: GridPoint) -> Iterable[Tuple[GridPoint, GridPoint]]:
+def motion_neighbours(point: GridPoint) -> Iterable[Tuple[GridPoint, GridPoint, bool]]:
     x, y = point
-    yield (x + 1, y), (1, 0)
-    yield (x - 1, y), (-1, 0)
-    yield (x, y + 1), (0, 1)
-    yield (x, y - 1), (0, -1)
+    # Axis alignment uses the normal 50 mm planning resolution.
+    for dx, dy in (
+        (AXIS_STEP_CELLS, 0),
+        (0, AXIS_STEP_CELLS),
+        (0, -AXIS_STEP_CELLS),
+    ):
+        yield (x + dx, y + dy), (dx, dy), False
+
+    for index in range(5):
+        move_time = DIAGONAL_MIN_TIME_S + index * DIAGONAL_TIME_STEP_S
+        step_x = int(round(DIAGONAL_X_SPEED_MM_S * move_time / GRID_STEP_MM))
+        step_y = int(round(DIAGONAL_Y_SPEED_MM_S * move_time / GRID_STEP_MM))
+        for sign_x, sign_y in ((1, 1), (1, -1)):
+            dx = sign_x * step_x
+            dy = sign_y * step_y
+            # All scaled primitives share the same canonical direction, so
+            # simplify_grid_path merges them into one diagonal leg.
+            direction = (sign_x, sign_y)
+            yield (x + dx, y + dy), direction, True
 
 
-def manhattan(a: GridPoint, b: GridPoint) -> int:
-    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+def motion_time_s(start: GridPoint, finish: GridPoint, is_diagonal: bool) -> float:
+    dx_mm = abs(finish[0] - start[0]) * GRID_STEP_MM
+    dy_mm = abs(finish[1] - start[1]) * GRID_STEP_MM
+    if is_diagonal:
+        return dx_mm / DIAGONAL_X_SPEED_MM_S
+    if dx_mm:
+        return dx_mm / FORWARD_SPEED_MM_S
+    return dy_mm / LATERAL_SPEED_MM_S
+
+
+def time_heuristic(current: GridPoint, goal: GridPoint) -> float:
+    """Optimistic remaining time, ignoring obstacles and turn overhead."""
+    dx_mm = max(goal[0] - current[0], 0) * GRID_STEP_MM
+    dy_mm = abs(goal[1] - current[1]) * GRID_STEP_MM
+    return max(dx_mm / FORWARD_SPEED_MM_S, dy_mm / LATERAL_SPEED_MM_S)
+
+
+def segment_is_clear(start: GridPoint, finish: GridPoint, blocked: set[GridPoint]) -> bool:
+    """Check the whole motion primitive, preventing diagonal corner cutting."""
+    dx = finish[0] - start[0]
+    dy = finish[1] - start[1]
+    sample_count = max(abs(dx), abs(dy)) * 4
+    for i in range(sample_count + 1):
+        ratio = float(i) / sample_count if sample_count else 0.0
+        cell = (round(start[0] + dx * ratio), round(start[1] + dy * ratio))
+        if cell in blocked:
+            return False
+    return True
 
 
 def reconstruct_state_path(
@@ -309,17 +391,24 @@ def simplify_grid_path(path: Sequence[GridPoint]) -> List[GridPoint]:
         return list(path)
 
     simplified = [path[0]]
-    prev_dx = path[1][0] - path[0][0]
-    prev_dy = path[1][1] - path[0][1]
+    prev_direction = normalized_grid_direction(path[0], path[1])
 
     for i in range(1, len(path) - 1):
-        dx = path[i + 1][0] - path[i][0]
-        dy = path[i + 1][1] - path[i][1]
-        if (dx, dy) != (prev_dx, prev_dy):
+        direction = normalized_grid_direction(path[i], path[i + 1])
+        if direction != prev_direction:
             simplified.append(path[i])
-            prev_dx, prev_dy = dx, dy
+            prev_direction = direction
     simplified.append(path[-1])
     return simplified
+
+
+def normalized_grid_direction(start: GridPoint, finish: GridPoint) -> GridPoint:
+    dx = finish[0] - start[0]
+    dy = finish[1] - start[1]
+    if dx and dy:
+        return (1 if dx > 0 else -1, 1 if dy > 0 else -1)
+    divisor = math.gcd(abs(dx), abs(dy))
+    return (dx // divisor, dy // divisor)
 
 
 class CanvasMapper:
