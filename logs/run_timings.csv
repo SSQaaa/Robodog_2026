@@ -26,3 +26,7 @@
 08101947,failed,39.332,13.395,,,56.832,"[[1250, 631], [2850, 987]]",
 08102039,failed,48.722,22.604,,,75.011,"[[1250, 631], [2850, 987]]",
 08102054,completed,47.271,138.544,15.368,164.349,374.354,"[[1250, 613], [2850, 962]]",
+08102147,completed,41.051,128.262,17.803,171.857,367.198,"[[2570, 400], [1260, 900]]",
+08102200,completed,44.300,134.106,16.303,103.172,306.014,"[[1650, 400], [3100, 1150]]",
+08102214,failed,0.014,,,,3.428,"""unavailable: Task1 path plan start/finish mismatch. expected start_mm=[-250, 750] finish_mm=[4350, 750], got start_mm=[-350, 750] finish_mm=[4350, 750]. Run tools/task1_path_planner.py and press s to save again.""","main: Task1 path plan start/finish mismatch. expected start_mm=[-250, 750] finish_mm=[4350, 750], got start_mm=[-350, 750] finish_mm=[4350, 750]. Run tools/task1_path_planner.py and press s to save again."
+08102215,completed,44.798,114.908,17.178,132.741,318.245,"[[1650, 400], [3100, 1150]]",

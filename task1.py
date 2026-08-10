@@ -11,7 +11,7 @@ from tools.world_pose import read_world_pose_once
 
 PLAN_PATH = os.path.join(PROJECT_DIR, "tools", "task1_path_plan.json")
 
-START_PLAN_X_M = -0.35
+START_PLAN_X_M = -0.25
 START_PLAN_Y_M = 0.75
 FINISH_PLAN_X_M = 4.35
 FINISH_PLAN_Y_M = 0.75
