@@ -1,8 +1,12 @@
 {
   "unit": "mm",
   "coordinate_system": {
-    "x": "forward",
-    "y": "right",
+    "frame": "task1_plan_frame",
+    "x": "forward in plan frame; mapped to dog start yaw in ROS world by task1.py",
+    "y": "right in plan frame; mapped to the right side of dog start yaw by task1.py",
+    "start_finish_source": "2026Project/task1.py START_PLAN_* and FINISH_PLAN_* constants",
+    "runtime_anchor": "start_mm is placed at the dog ROS pose when task1.py starts",
+    "runtime_execution": "task1.py converts every live ROS pose into this plan frame, then moves and corrects using plan-coordinate error only",
     "corridor": {
       "x_min": 0,
       "x_max": 4000,
@@ -15,34 +19,34 @@
     "width_y": 400
   },
   "start_mm": [
-    -500,
+    -350,
     750
   ],
   "finish_mm": [
-    4500,
+    4350,
     750
   ],
   "cones_mm": [
     {
       "center": [
-        1712,
-        1288
+        1250,
+        613
       ],
       "rect": {
-        "x": 1552,
-        "y": 1128,
+        "x": 1090,
+        "y": 453,
         "w": 320,
         "h": 320
       }
     },
     {
       "center": [
-        3500,
-        475
+        2850,
+        962
       ],
       "rect": {
-        "x": 3340,
-        "y": 315,
+        "x": 2690,
+        "y": 802,
         "w": 320,
         "h": 320
       }
@@ -50,43 +54,43 @@
   ],
   "waypoints_mm": [
     [
-      -500,
+      -350,
       750
     ],
     [
-      1050,
-      750
+      -350,
+      850
     ],
     [
-      1050,
+      800,
+      1300
+    ],
+    [
+      1650,
+      1300
+    ],
+    [
+      2050,
+      1150
+    ],
+    [
+      2050,
+      450
+    ],
+    [
+      2450,
+      300
+    ],
+    [
+      3350,
+      300
+    ],
+    [
+      4350,
       700
     ],
     [
-      2400,
-      700
-    ],
-    [
-      2400,
-      750
-    ],
-    [
-      2800,
-      750
-    ],
-    [
-      2800,
-      1050
-    ],
-    [
-      4200,
-      1050
-    ],
-    [
-      4200,
-      750
-    ],
-    [
-      4500,
+      4350,
       750
     ]
   ],

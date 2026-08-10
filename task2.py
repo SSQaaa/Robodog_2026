@@ -265,22 +265,23 @@ def _run_single_dashboard_with_detector(
 
             if abs(letter_error_m) > 0.30:
                 letter_vx_abs = 20000
-            elif abs(letter_error_m) > 0.10:
-                letter_vx_abs = 10000
+                letter_move_time_s = 0.30
             else:
-                letter_vx_abs = 7000
+                letter_vx_abs = 10000
+                letter_move_time_s = 0.10
 
             letter_vx = letter_vx_abs if letter_error_m < 0 else -letter_vx_abs
-            dog.move(last_time=0.10, vx=letter_vx)
+            dog.move(last_time=letter_move_time_s, vx=letter_vx)
             letter_distance_adjust_count += 1
             print(
-                "D{} LETTER_DISTANCE: {} 当前={:.3f}m 目标={:.3f}m 误差={:.3f}m vx={} 次数={}".format(
+                "D{} LETTER_DISTANCE: {} 当前={:.3f}m 目标={:.3f}m 误差={:.3f}m vx={} time={:.2f}s 次数={}".format(
                     dashboard_index,
                     letter,
                     letter_distance_m,
                     letter_distance_target_m,
                     letter_error_m,
                     letter_vx,
+                    letter_move_time_s,
                     letter_distance_adjust_count,
                 )
             )

@@ -257,7 +257,7 @@ class Task3:
         self.dog.move(vy=vy, last_time=SIDE_MOVE_SECONDS, duration=0.3)
 
     def x_move_by_depth(self, depth_mm):
-        if depth_mm is not None and float(depth_mm) < 300.0:
+        if depth_mm is not None and float(depth_mm) < 310.0:
             return 7000, 0.1
         elif depth_mm is not None and float(depth_mm) < 600.0:
             return 20000, 0.3

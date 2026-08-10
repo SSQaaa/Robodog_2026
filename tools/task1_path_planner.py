@@ -18,8 +18,8 @@ Coordinate system, unit: millimetres
 
 Run:
     python tools/task1_path_planner.py
-    input two cone x values in left-to-right order, unit: mm.
-    cone y values are measured from the depth camera.
+    input x and y for the left cone, then x and y for the right cone,
+    all in millimetres in the task1 plan frame.
 """
 
 from __future__ import annotations
@@ -64,8 +64,8 @@ COLOR_FX = 453.72
 CAM_ON_ROBOT_X_M = 0.2
 CAM_ON_ROBOT_Y_M = 0.0
 
-# 锥桶四周的默认安全距离，单位：毫米。
-CONE_CLEARANCE_MM = 100
+# 锥桶四周的默认硬安全距离，单位：毫米。
+CONE_CLEARANCE_MM = 200
 
 # Measured with dog.move(vx=20000, vy=25000): one second moves about
 # 400 mm in plan x and 150 mm in plan y. Diagonal endpoints are rounded to
@@ -81,6 +81,8 @@ DIAGONAL_Y_SPEED_MM_S = 150.0
 TURN_PENALTY_S = 0.15
 AXIS_STEP_CELLS = 1
 HEURISTIC_WEIGHT = 1.0
+SOFT_CLEARANCE_MM = 600
+SOFT_CLEARANCE_MAX_RATE = 0.60
 
 
 @dataclass(frozen=True)
@@ -219,7 +221,8 @@ class CorridorPlanner:
         if start in blocked or goal in blocked:
             return None
 
-        path_grid = astar_measured_diagonal(start, goal, blocked, self.grid_bounds())
+        clearance = clearance_from_blocked(blocked, self.grid_bounds())
+        path_grid = astar_measured_diagonal(start, goal, blocked, self.grid_bounds(), clearance)
         if path_grid is None:
             return None
         return [self.grid_to_mm(point) for point in simplify_grid_path(path_grid)]
@@ -259,10 +262,11 @@ def astar_measured_diagonal(
     goal: GridPoint,
     blocked: set[GridPoint],
     bounds: Tuple[int, int, int, int],
+    clearance_cells: Optional[Dict[GridPoint, float]] = None,
 ) -> Optional[List[GridPoint]]:
     """Find a short collision-free path using the measured diagonal step.
 
-    Cost is estimated movement time plus a small turn penalty.  This makes a
+    Cost is estimated movement time plus a small turn and proximity penalty.  This makes a
     diagonal useful for avoiding an obstacle while moving forward, instead of
     creating unnecessary diagonal zigzags, and avoids slow pure-Y movement.
     """
@@ -302,7 +306,8 @@ def astar_measured_diagonal(
                 next_turns += 1
             step_time = motion_time_s(current, nxt, is_diagonal)
             turn_cost = TURN_PENALTY_S if direction is not None and next_direction != direction else 0.0
-            next_distance_cost = distance_cost + step_time + turn_cost
+            proximity_cost = segment_clearance_penalty_s(current, nxt, step_time, clearance_cells)
+            next_distance_cost = distance_cost + step_time + turn_cost + proximity_cost
             next_state = (nxt, next_direction)
             next_cost = (next_distance_cost, next_turns)
             if next_cost >= best_cost.get(next_state, (float("inf"), 10**9)):
@@ -319,6 +324,47 @@ def astar_measured_diagonal(
     if best_goal_state is None:
         return None
     return reconstruct_state_path(came_from, best_goal_state)
+
+
+def clearance_from_blocked(
+    blocked: set[GridPoint], bounds: Tuple[int, int, int, int]
+) -> Dict[GridPoint, float]:
+    """Return Euclidean clearance to the nearest hard keepout cell."""
+    if not blocked:
+        return {}
+    min_gx, max_gx, min_gy, max_gy = bounds
+    result: Dict[GridPoint, float] = {}
+    for gx in range(min_gx, max_gx + 1):
+        for gy in range(min_gy, max_gy + 1):
+            point = (gx, gy)
+            if point in blocked:
+                result[point] = 0.0
+                continue
+            result[point] = min(math.hypot(gx - bx, gy - by) for bx, by in blocked)
+    return result
+
+
+def segment_clearance_penalty_s(
+    start: GridPoint,
+    finish: GridPoint,
+    motion_time: float,
+    clearance_cells: Optional[Dict[GridPoint, float]],
+) -> float:
+    """Integrate a small proximity cost along one complete motion primitive."""
+    if not clearance_cells:
+        return 0.0
+    dx = finish[0] - start[0]
+    dy = finish[1] - start[1]
+    sample_count = max(abs(dx), abs(dy), 1)
+    risk_sum = 0.0
+    for i in range(sample_count + 1):
+        ratio = float(i) / sample_count
+        point = (round(start[0] + dx * ratio), round(start[1] + dy * ratio))
+        clearance_mm = clearance_cells.get(point, float("inf")) * GRID_STEP_MM
+        proximity = max(0.0, (SOFT_CLEARANCE_MM - clearance_mm) / SOFT_CLEARANCE_MM)
+        risk_sum += proximity * proximity
+    mean_risk = risk_sum / (sample_count + 1)
+    return motion_time * SOFT_CLEARANCE_MAX_RATE * mean_risk
 
 
 def motion_neighbours(point: GridPoint) -> Iterable[Tuple[GridPoint, GridPoint, bool]]:
@@ -724,14 +770,10 @@ def show_plan_result(planner: CorridorPlanner, result: PlanResult) -> None:
 
 
 def run_distance_input(planner: CorridorPlanner, out_path: Path) -> None:
-    x_values = [input_int_mm("{} cone x from x=0 line mm: ".format(name)) for name in ("left", "right")]
-
-    y_values = detect_cone_y_mm(expected_count=2)
-    for name, y in zip(("left", "right"), y_values):
-        print("{} cone y = {} mm".format(name, y))
-
     cones: List[Rect] = []
-    for name, x, y in zip(("left", "right"), x_values, y_values):
+    for name in ("left", "right"):
+        x = input_int_mm("{} cone x from x=0 line mm: ".format(name))
+        y = input_int_mm("{} cone y from y=0 line mm: ".format(name))
         cone = planner.cone_from_center((x, y))
         print("{} cone plan center = ({}, {}) mm".format(name, cone.center[0], cone.center[1]))
         cones.append(cone)
