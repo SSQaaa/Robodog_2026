@@ -30,3 +30,4 @@
 08102200,completed,44.300,134.106,16.303,103.172,306.014,"[[1650, 400], [3100, 1150]]",
 08102214,failed,0.014,,,,3.428,"""unavailable: Task1 path plan start/finish mismatch. expected start_mm=[-250, 750] finish_mm=[4350, 750], got start_mm=[-350, 750] finish_mm=[4350, 750]. Run tools/task1_path_planner.py and press s to save again.""","main: Task1 path plan start/finish mismatch. expected start_mm=[-250, 750] finish_mm=[4350, 750], got start_mm=[-350, 750] finish_mm=[4350, 750]. Run tools/task1_path_planner.py and press s to save again."
 08102215,completed,44.798,114.908,17.178,132.741,318.245,"[[1650, 400], [3100, 1150]]",
+08121929	completed	38.665	102.9	16.507	116.559	282.763	[[1100, 300], [3300, 1200]]	
