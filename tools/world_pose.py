@@ -149,15 +149,24 @@ def correct_yaw(
     target_yaw_deg,
     max_adjust_steps=1,
     tolerance_deg=3.0,
+    tolerance_min_deg=None,
+    tolerance_max_deg=None,
     stable_need_frames=1,
     sample_count=3,
     settle_s=1.0,
 ):
+    if tolerance_min_deg is None:
+        tolerance_min_deg = -float(tolerance_deg)
+    if tolerance_max_deg is None:
+        tolerance_max_deg = float(tolerance_deg)
+    if float(tolerance_min_deg) > float(tolerance_max_deg):
+        raise ValueError("tolerance_min_deg cannot be greater than tolerance_max_deg")
+
     stable_count = 0
     for step in range(1, int(max_adjust_steps) + 1):
         current_yaw = read_yaw_deg(sample_count)
         error = normalize_yaw_error_deg(target_yaw_deg, current_yaw)
-        if abs(error) <= float(tolerance_deg):
+        if float(tolerance_min_deg) <= error <= float(tolerance_max_deg):
             stable_count += 1
             print(
                 "[Yaw] step={} stable={}/{} current={:.3f} target={:.3f} error={:.3f}".format(

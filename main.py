@@ -3,7 +3,7 @@ import time
 import traceback
 from contextlib import contextmanager
 from datetime import datetime
-
+# TODO：前两次yaw校正改成2度。终点的设定，平移多就设为4.35，平移少就设置为4.2。C回来走1s。任务一结束的向前时间？
 import task1
 import task2
 import task2_3
@@ -102,7 +102,11 @@ def main():
                 dog,
                 start_yaw_deg - 90.0,
                 max_adjust_steps=1,
-                stable_need_frames=1,
+                # A small right over-rotation is intentional: lateral
+                # movement tends to drift the dog backward.
+                tolerance_min_deg=0.0,
+                tolerance_max_deg=3.0,
+                stable_need_frames=3,
                 sample_count=3,
                 settle_s=0.0,
             )

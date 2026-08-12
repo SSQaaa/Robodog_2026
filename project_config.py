@@ -38,9 +38,9 @@ UNKNOWN_STATE_CN = "未知"
 
 DEFAULT_DASHBOARD_STATUS = {
     "A": "ABNORMAL",
-    "B": "ABNORMAL",
+    "B": "NORMAL",
     "C": "NORMAL",
-    "D": "NORMAL",
+    "D": "ABNORMAL",
 }
 
 DOG_IP = "192.168.1.120"

@@ -184,9 +184,23 @@ class CorridorPlanner:
 
     def plan_with_cones(self, cones: Sequence[Rect], svg_path: Optional[Path] = None) -> PlanResult:
         self.validate_cones(cones)
-        path = self.plan(cones)
+
+        initial_clearance = max(0, self.clearance)
+        clearance_candidates = list(range(initial_clearance, -1, -10))
+        if clearance_candidates[-1] != 0:
+            clearance_candidates.append(0)
+
+        path = None
+        for clearance_mm in clearance_candidates:
+            self.clearance = clearance_mm
+            path = self.plan(cones)
+            if path is not None:
+                break
+
         if path is None:
-            raise RuntimeError("no valid path found for the specified cone positions")
+            raise RuntimeError(
+                "no valid path found for the specified cone positions, even with 0 mm clearance"
+            )
 
         result = PlanResult(
             list(path),
@@ -222,10 +236,33 @@ class CorridorPlanner:
             return None
 
         clearance = clearance_from_blocked(blocked, self.grid_bounds())
-        path_grid = astar_measured_diagonal(start, goal, blocked, self.grid_bounds(), clearance)
+        transition_x = self.between_cones_transition_x(cones)
+        path_grid = astar_measured_diagonal(
+            start,
+            goal,
+            blocked,
+            self.grid_bounds(),
+            clearance,
+            transition_x,
+        )
         if path_grid is None:
             return None
         return [self.grid_to_mm(point) for point in simplify_grid_path(path_grid)]
+
+    def between_cones_transition_x(self, cones: Sequence[Rect]) -> Optional[int]:
+        """Return the grid x for lateral motion between the two cones.
+
+        Put the transition two thirds of the way from the smaller-x cone to
+        the larger-x cone.  This keeps it closer to the front cone so that
+        lateral-motion rear drift has more room behind the robot.
+        """
+        if len(cones) != 2:
+            return None
+        rear_cone, front_cone = sorted(cones, key=lambda cone: cone.center[0])
+        rear_x = rear_cone.center[0]
+        front_x = front_cone.center[0]
+        transition_x_mm = rear_x + (2.0 / 3.0) * (front_x - rear_x)
+        return round(transition_x_mm / self.grid_step)
 
     def blocked_cells(self, cones: Sequence[Rect]) -> set[GridPoint]:
         blocked: set[GridPoint] = set()
@@ -263,6 +300,7 @@ def astar_measured_diagonal(
     blocked: set[GridPoint],
     bounds: Tuple[int, int, int, int],
     clearance_cells: Optional[Dict[GridPoint, float]] = None,
+    transition_x: Optional[int] = None,
 ) -> Optional[List[GridPoint]]:
     """Find a short collision-free path using the measured diagonal step.
 
@@ -297,6 +335,16 @@ def astar_measured_diagonal(
             # diagonal is used only for the obstacle-avoidance part between
             # those alignment legs.
             if is_diagonal and (current == start or nxt == goal):
+                continue
+            # Keep the main lateral transition between the cones at the
+            # requested x.  Pure lateral alignment remains allowed at the
+            # start and finish x positions.
+            is_lateral = nxt[0] == current[0] and nxt[1] != current[1]
+            if (
+                is_lateral
+                and transition_x is not None
+                and current[0] not in (start[0], transition_x, goal[0])
+            ):
                 continue
             if not segment_is_clear(current, nxt, blocked):
                 continue

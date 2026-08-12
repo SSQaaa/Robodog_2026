@@ -497,14 +497,21 @@ def task2_new(dog, detector, show_stream=False):
         yaw_before_turn = read_yaw_deg()
         dog.revolve_90_r()
         time.sleep(2.0)
-        correct_yaw(
-            dog,
-            yaw_before_turn - 90.0,
-            max_adjust_steps=1,
-            stable_need_frames=1,
-            sample_count=3,
-            settle_s=0.0,
+        target_yaw_after_turn = yaw_before_turn - 90.0
+        print(
+            "D3_AFTER_TURN_YAW: start correction before={:.3f} target={:.3f}".format(
+                yaw_before_turn, target_yaw_after_turn
+            )
         )
+        yaw_after_correction = correct_yaw(
+            dog,
+            target_yaw_after_turn,
+            max_adjust_steps=1,
+            stable_need_frames=3,
+            sample_count=3,
+            settle_s=0.5,
+        )
+        print("D3_AFTER_TURN_YAW: correction finished current={:.3f}".format(yaw_after_correction))
         # 换了个足端感觉没有变斜情况了
         # dog.move(last_time=0.18, vz=10000)
         time.sleep(0.5)
