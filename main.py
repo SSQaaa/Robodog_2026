@@ -12,7 +12,6 @@ from project_config import DEFAULT_DASHBOARD_STATUS
 from task3 import Task3
 from tools.motion import DogControl
 from tools.run_logger import append_run_log
-from tools.vision import resolve_dashboard_status
 from tools.vision_manager import VisionManager
 from tools.world_pose import close_pose_reader, correct_yaw
 
@@ -40,14 +39,8 @@ def input_run_time():
 
 
 def get_task3_status(records):
-    if records:
-        try:
-            status = resolve_dashboard_status(records, default_status=DEFAULT_DASHBOARD_STATUS)
-            if status:
-                return status
-        except Exception:
-            traceback.print_exc()
-    print("[Main] use default task3 status")
+    _ = records
+    print("[Main] use project_config DEFAULT_DASHBOARD_STATUS for task3")
     return dict(DEFAULT_DASHBOARD_STATUS)
 
 

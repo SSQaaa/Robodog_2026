@@ -185,6 +185,7 @@ def correct_yaw(
                 )
             )
             dog.move(last_time=0.1, vz=vz_cmd)
+            print("狗头真的转了")
         if step < int(max_adjust_steps) and settle_s > 0:
             time.sleep(float(settle_s))
 
