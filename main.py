@@ -105,7 +105,7 @@ def main():
                 # A small right over-rotation is intentional: lateral
                 # movement tends to drift the dog backward.
                 tolerance_min_deg=0.0,
-                tolerance_max_deg=3.0,
+                tolerance_max_deg=2.0,
                 stable_need_frames=3,
                 sample_count=3,
                 settle_s=0.0,

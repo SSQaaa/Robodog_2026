@@ -506,6 +506,7 @@ def task2_new(dog, detector, show_stream=False):
         yaw_after_correction = correct_yaw(
             dog,
             target_yaw_after_turn,
+            tolerance_deg = 2,
             max_adjust_steps=1,
             stable_need_frames=3,
             sample_count=3,

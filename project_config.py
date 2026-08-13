@@ -37,9 +37,9 @@ STATUS_CN_TO_TASK3 = {
 UNKNOWN_STATE_CN = "未知"
 
 DEFAULT_DASHBOARD_STATUS = {
-    "A": "ABNORMAL",
+    "A": "NORMAL",
     "B": "NORMAL",
-    "C": "NORMAL",
+    "C": "ABNORMAL",
     "D": "ABNORMAL",
 }
 

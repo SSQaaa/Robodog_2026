@@ -129,6 +129,9 @@ class Task3:
             self.dog.move(vy=-SIDE_SPEED, last_time=BACK_OFFSET_TIME, duration=0.3)
         if letter == 'B':
             self.dog.move(vy=-SIDE_SPEED, last_time=BACK_OFFSET_TIME - 2.0, duration=0.3)
+        if letter == 'C':
+            self.dog.move(vy=-SIDE_SPEED, last_time=BACK_OFFSET_TIME - 5.0, duration=0.3)
+                    
             
 
         self.move_forward_until_red()
