@@ -113,7 +113,7 @@ class Task3:
         self.approach_box_2(letter)
         time.sleep(0.5)
         # 到达30cm后再往前冲刺一咪咪
-        self.dog.move(vx=10000, last_time=0.15, duration=0.3)
+        self.dog.move(vx=10000, last_time=0.2, duration=0.3)
         self.arm.place_block()
         with ThreadPoolExecutor(max_workers=1) as executor:
             reset_future = executor.submit(self.arm.reset)

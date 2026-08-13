@@ -507,7 +507,7 @@ def task2_new(dog, detector, show_stream=False):
             dog,
             target_yaw_after_turn,
             tolerance_deg = 2,
-            max_adjust_steps=1,
+            max_adjust_steps=3,
             stable_need_frames=3,
             sample_count=3,
             settle_s=0.5,

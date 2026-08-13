@@ -90,9 +90,37 @@ def current_plan_pose_with_yaw_m(start_world_pose):
     forward_x, forward_y, right_x, right_y = plan_axis_vectors(yaw)
     plan_dx = world_dx * forward_x + world_dy * forward_y
     plan_dy = world_dx * right_x + world_dy * right_y
+    plan_x = START_PLAN_X_M + plan_dx
+    plan_y = START_PLAN_Y_M + plan_dy
+    print(
+        "[Task1][PoseDebug] start_ros=({:.3f}, {:.3f}) current_ros=({:.3f}, {:.3f}) "
+        "world_delta=({:.3f}, {:.3f}) start_yaw={:.3f}rad/{:.2f}deg "
+        "forward_axis=({:.4f}, {:.4f}) right_axis=({:.4f}, {:.4f}) "
+        "plan_delta=({:.3f}, {:.3f}) plan=({:.3f}, {:.3f}) "
+        "current_yaw={:.3f}rad/{:.2f}deg".format(
+            start_world_pose.x,
+            start_world_pose.y,
+            current_world_pose.x,
+            current_world_pose.y,
+            world_dx,
+            world_dy,
+            yaw,
+            math.degrees(yaw),
+            forward_x,
+            forward_y,
+            right_x,
+            right_y,
+            plan_dx,
+            plan_dy,
+            plan_x,
+            plan_y,
+            current_world_pose.yaw_rad,
+            current_world_pose.yaw_deg,
+        )
+    )
     return (
-        START_PLAN_X_M + plan_dx,
-        START_PLAN_Y_M + plan_dy,
+        plan_x,
+        plan_y,
         current_world_pose.yaw_rad,
         current_world_pose.yaw_deg,
     )

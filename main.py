@@ -94,14 +94,11 @@ def main():
             correct_yaw(
                 dog,
                 start_yaw_deg - 90.0,
-                max_adjust_steps=1,
-                # A small right over-rotation is intentional: lateral
-                # movement tends to drift the dog backward.
-                tolerance_min_deg=0.0,
-                tolerance_max_deg=2.0,
+                tolerance_deg = 2,
+                max_adjust_steps=3,
                 stable_need_frames=3,
                 sample_count=3,
-                settle_s=0.0,
+                settle_s=0.5,
             )
             # time.sleep(2)
 

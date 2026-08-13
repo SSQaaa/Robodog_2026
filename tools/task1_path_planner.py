@@ -253,8 +253,11 @@ class CorridorPlanner:
         """Return the grid x for lateral motion between the two cones.
 
         Put the transition two thirds of the way from the smaller-x cone to
-        the larger-x cone.  This keeps it closer to the front cone so that
-        lateral-motion rear drift has more room behind the robot.
+        the larger-x cone when that position is collision-free.  If the
+        requested position enters either cone's robot-centre keepout area,
+        clamp it to the nearest feasible grid column between the keepouts.
+        This keeps it as close as safely possible to the front cone while
+        leaving room for lateral-motion rear drift.
         """
         if len(cones) != 2:
             return None
@@ -262,7 +265,20 @@ class CorridorPlanner:
         rear_x = rear_cone.center[0]
         front_x = front_cone.center[0]
         transition_x_mm = rear_x + (2.0 / 3.0) * (front_x - rear_x)
-        return round(transition_x_mm / self.grid_step)
+
+        robot_half_length = self.robot.w // 2
+        rear_keepout_right = self.cone_keepout_rect(rear_cone).right + robot_half_length
+        front_keepout_left = self.cone_keepout_rect(front_cone).left - robot_half_length
+        min_grid_x = math.ceil(rear_keepout_right / self.grid_step)
+        max_grid_x = math.floor(front_keepout_left / self.grid_step)
+        if min_grid_x > max_grid_x:
+            # There is no grid column between the two hard keepouts at the
+            # current clearance.  Returning an unreachable transition keeps
+            # this attempt from silently moving laterally somewhere else;
+            # plan_with_cones will retry with a smaller clearance.
+            return max_grid_x
+        desired_grid_x = round(transition_x_mm / self.grid_step)
+        return clamp(desired_grid_x, min_grid_x, max_grid_x)
 
     def blocked_cells(self, cones: Sequence[Rect]) -> set[GridPoint]:
         blocked: set[GridPoint] = set()
