@@ -4,6 +4,7 @@ import time
 from arm_control import ArmControl, DEFAULT_CONFIG_PATH
 from project_config import (
     BACKWARD_SPEED,
+    BOX_LETTER_ORDER,
     DEFAULT_DASHBOARD_STATUS,
     FORWARD_SPEED,
     PRE_GRASP_MOVE_SPEED_X,
@@ -22,8 +23,6 @@ STATUS_TO_BLOCK = {
     "偏低": "Red",
     "偏高": "Red",
 }
-
-BOX_LETTER_ORDER = ("A", "D", "C", "B")
 
 CENTER_TOLERANCE_BLOCK_PX = 100  # 中心值+-100就认为绿/红色物块在画面中心，主要是因为离得比较近
 PRE_GRASP_MOVE_SECONDS_X = 0.1   # 抓物块时候狗往前/后移动的时间，调整物块距离
@@ -75,7 +74,7 @@ class Task3:
     def run(self):
         abnormal_letters = [
             letter
-            for letter in ("A", "B", "C", "D")
+            for letter in BOX_LETTER_ORDER
             if STATUS_TO_BLOCK.get(self.status_dict.get(letter)) == "Red"
         ]
         if not abnormal_letters:
@@ -125,11 +124,11 @@ class Task3:
 
         self.dog.revolve_180()
         time.sleep(0.5)
-        if letter == 'A':
+        if letter == BOX_LETTER_ORDER[0]:
             self.dog.move(vy=-SIDE_SPEED, last_time=BACK_OFFSET_TIME, duration=0.3)
-        if letter == 'B':
+        if letter == BOX_LETTER_ORDER[1]:
             self.dog.move(vy=-SIDE_SPEED, last_time=BACK_OFFSET_TIME - 2.0, duration=0.3)
-        if letter == 'C':
+        if letter == BOX_LETTER_ORDER[2]:
             self.dog.move(vy=-SIDE_SPEED, last_time=BACK_OFFSET_TIME - 5.0, duration=0.3)
                     
             
@@ -188,7 +187,7 @@ class Task3:
         self.dog.stop()
 
     def refind_box_letter(self, class_name, back_time=0.3):
-        # 如果画面中有ABCD就直接左右移动
+        # 如果画面中有任一箱子字母，就按配置的左右顺序移动。
         frame, detections = self.vision.detect()
         if frame is None:
             detections = []
@@ -204,7 +203,7 @@ class Task3:
             self.move_toward_box_letter(class_name, visible_letters)
             return frame, []
 
-        # 如果没有ABCD就先站定再识别，防止因为抖动导致的识别失败
+        # 如果没有箱子字母，就先站定再识别，防止抖动导致识别失败。
         self.dog.stop()
         time.sleep(0.5)
         frame, detections = self.vision.detect()
@@ -246,7 +245,7 @@ class Task3:
         target_index = BOX_LETTER_ORDER.index(target)
         current_index = BOX_LETTER_ORDER.index(current)
 
-        # Boxes are arranged A, B, C, D from left to right.
+        # Boxes are arranged according to BOX_LETTER_ORDER from left to right.
         if current_index > target_index:
             vy = -SIDE_SPEED
             direction = "left"
@@ -414,8 +413,13 @@ class Task3:
             last_seen = target
 
             _, frame_w = frame.shape[:2]
-            # 防止出界，D 中心点偏右时，就认为已经中心对齐了。
-            error_x = target.center[0] - frame_w * 0.5 if letter != 'D' else target.center[0] - frame_w * 0.5 - 30
+            # 防止出界：最右侧箱子中心点偏右时，也认为已经中心对齐。
+            rightmost_letter = BOX_LETTER_ORDER[-1]
+            error_x = (
+                target.center[0] - frame_w * 0.5
+                if letter != rightmost_letter
+                else target.center[0] - frame_w * 0.5 - 30
+            )
             print(f"[Box] {letter} error_x={error_x:.1f}px")
 
             if abs(error_x) > CENTER_TOLERANCE_BOX_PX:

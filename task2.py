@@ -84,15 +84,17 @@ def _move_sideways_until_letter(dog, detector, direction, max_move_seconds=5.0):
     while moved_seconds + 1e-9 < max_move_seconds:
         if _pick_best_letter_detection(detector.infer_once()) is not None:
             print("检测到字母，停止{}移".format(direction_cn))
-            break
+            dog.stop()
+            return True
         step_seconds = min(1, max_move_seconds - moved_seconds)
         dog.move(last_time=step_seconds, vy=vy)
         moved_seconds += step_seconds
-    else:
-        print("{}移达到最大时间{:.1f}s，停止{}移".format(
-            direction_cn, max_move_seconds, direction_cn
-        ))
+
     dog.stop()
+    print("{}移达到最大时间{:.1f}s，未检测到字母".format(
+        direction_cn, max_move_seconds
+    ))
+    return False
 
 
 def _wait_single_dashboard(detector, dog):
@@ -409,9 +411,20 @@ def task2_new(dog, detector, show_stream=False):
         dog.move(last_time=7, vx=20000)
         time.sleep(0.5)
         dog.move(last_time=3.5, vy=25000)
-        _move_sideways_until_letter(dog, detector, direction="right")
-        dog.move(last_time=1, vx=-20000)
-        _move_sideways_until_letter(dog, detector, direction="left", max_move_seconds=2.0)
+        found_letter = _move_sideways_until_letter(
+            dog,
+            detector,
+            direction="right",
+        )
+        if not found_letter:
+            print("右移未找到字母，后退一点后开始左移")
+            dog.move(last_time=0.5, vx=-20000)
+            _move_sideways_until_letter(
+                dog,
+                detector,
+                direction="left",
+                max_move_seconds=2.0,
+            )
         time.sleep(0.5)
 
         # ----------------------------
