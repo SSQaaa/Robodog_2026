@@ -462,7 +462,7 @@ def task2_new(dog, detector, show_stream=False):
         time.sleep(0.5)
         dog.revolve_180()
         time.sleep(0.5)
-        dog.move(last_time=2, vx=20000)
+        dog.move(last_time=1.5, vx=20000)
         time.sleep(0.5)
         # dog.move(last_time=0.18, vz=10000) #定
         # time.sleep(0.8)
