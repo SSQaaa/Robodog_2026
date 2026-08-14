@@ -261,7 +261,7 @@ class Task3:
         if depth_mm is not None and float(depth_mm) < 300.0:
             return 7000, 0.1
         elif depth_mm is not None and float(depth_mm) < 400.0:
-            return 7000, 0.3        
+            return 10000, 0.1       
         elif depth_mm is not None and float(depth_mm) < 600.0:
             return 20000, 0.3
         return 20000, 0.5
