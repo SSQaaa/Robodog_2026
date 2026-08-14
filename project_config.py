@@ -43,7 +43,7 @@ DEFAULT_DASHBOARD_STATUS = {
     "D": "ABNORMAL",
 }
 
-BOX_LETTER_ORDER = ("A", "D", "C", "B")
+BOX_LETTER_ORDER = ("A", "B", "C", "D")
 
 DOG_IP = "192.168.1.120"
 DOG_PORT = 43893
