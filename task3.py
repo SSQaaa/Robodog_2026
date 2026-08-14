@@ -101,7 +101,7 @@ class Task3:
         # 抓方块
         self.grasp(block_class)
         time.sleep(0.5)
-
+        self.dog.move(vx=-15000, last_time=1.0, duration=0.3)
         # 转180
         self.dog.revolve_180()
         # 往前走
@@ -113,7 +113,7 @@ class Task3:
         self.approach_box_2(letter)
         time.sleep(0.5)
         # 到达30cm后再往前冲刺一咪咪
-        self.dog.move(vx=10000, last_time=0.2, duration=0.3)
+        self.dog.move(vx=10000, last_time=0.25, duration=0.3)
         self.arm.place_block()
         with ThreadPoolExecutor(max_workers=1) as executor:
             reset_future = executor.submit(self.arm.reset)
@@ -258,8 +258,10 @@ class Task3:
         self.dog.move(vy=vy, last_time=SIDE_MOVE_SECONDS, duration=0.3)
 
     def x_move_by_depth(self, depth_mm):
-        if depth_mm is not None and float(depth_mm) < 310.0:
+        if depth_mm is not None and float(depth_mm) < 300.0:
             return 7000, 0.1
+        elif depth_mm is not None and float(depth_mm) < 400.0:
+            return 7000, 0.3        
         elif depth_mm is not None and float(depth_mm) < 600.0:
             return 20000, 0.3
         return 20000, 0.5

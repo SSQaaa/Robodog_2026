@@ -19,6 +19,12 @@ from tools.audio_announce import announce_dashboard
 from tools.vision import DashboardInfer, analyze_infer_output
 from tools.world_pose import correct_yaw, read_yaw_deg
 
+
+LETTER_ALIGN_MIN_DEPTH_M = 0.35
+LETTER_ALIGN_BACKWARD_VX = -20000
+LETTER_ALIGN_BACKWARD_TIME_S = 0.10
+
+
 def _calc_center_x_from_vertices(vertices):
     """根据四顶点计算中心x。"""
     x_sum = 0.0
@@ -218,6 +224,25 @@ def _run_single_dashboard_with_detector(
         letter_missing_count = 0
 
         if letter_state == "ALIGN":
+            if (
+                letter_distance_m is not None
+                and float(letter_distance_m) < LETTER_ALIGN_MIN_DEPTH_M
+            ):
+                dog.move(
+                    last_time=LETTER_ALIGN_BACKWARD_TIME_S,
+                    vx=LETTER_ALIGN_BACKWARD_VX,
+                )
+                print(
+                    "D{} LETTER_ALIGN: {} 距离过近，当前={:.3f}m 阈值={:.3f}m，先后退".format(
+                        dashboard_index,
+                        letter,
+                        float(letter_distance_m),
+                        LETTER_ALIGN_MIN_DEPTH_M,
+                    )
+                )
+                time.sleep(0.5)
+                continue
+
             if letter_x_center < letter_x_center_min:
                 dog.move(last_time=0.3, vy=-25000)
                 time.sleep(0.5)
