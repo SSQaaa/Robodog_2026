@@ -3,7 +3,6 @@ import time
 import traceback
 from contextlib import contextmanager
 from datetime import datetime
-# TODO：前两次yaw校正改成2度。终点的设定，平移多就设为4.35，平移少就设置为4.2。C回来走1s。任务一结束的向前时间？
 import task1
 import task2
 import task2_3
