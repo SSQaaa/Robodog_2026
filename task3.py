@@ -23,7 +23,7 @@ STATUS_TO_BLOCK = {
     "偏高": "Red",
 }
 
-BOX_LETTER_ORDER = ("A", "B", "C", "D")
+BOX_LETTER_ORDER = ("A", "D", "C", "B")
 
 CENTER_TOLERANCE_BLOCK_PX = 100  # 中心值+-100就认为绿/红色物块在画面中心，主要是因为离得比较近
 PRE_GRASP_MOVE_SECONDS_X = 0.1   # 抓物块时候狗往前/后移动的时间，调整物块距离

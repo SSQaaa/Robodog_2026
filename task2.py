@@ -72,17 +72,26 @@ def _has_ssi_detection(infer_output):
     return False
 
 
-def _move_right_until_letter(dog, detector, max_move_seconds=5.0):
+def _move_sideways_until_letter(dog, detector, direction, max_move_seconds=5.0):
+    """向左或向右横移，直到检测到字母或达到最大移动时间。"""
+    direction = str(direction).lower()
+    if direction not in ("left", "right"):
+        raise ValueError("direction must be 'left' or 'right', got {!r}".format(direction))
+
+    vy = -25000 if direction == "left" else 25000
+    direction_cn = "左" if direction == "left" else "右"
     moved_seconds = 0.0
     while moved_seconds + 1e-9 < max_move_seconds:
         if _pick_best_letter_detection(detector.infer_once()) is not None:
-            print("检测到字母，停止右移")
+            print("检测到字母，停止{}移".format(direction_cn))
             break
         step_seconds = min(1, max_move_seconds - moved_seconds)
-        dog.move(last_time=step_seconds, vy=25000)
+        dog.move(last_time=step_seconds, vy=vy)
         moved_seconds += step_seconds
     else:
-        print("右移达到最大时间{:.1f}s，停止右移".format(max_move_seconds))
+        print("{}移达到最大时间{:.1f}s，停止{}移".format(
+            direction_cn, max_move_seconds, direction_cn
+        ))
     dog.stop()
 
 
@@ -400,7 +409,9 @@ def task2_new(dog, detector, show_stream=False):
         dog.move(last_time=7, vx=20000)
         time.sleep(0.5)
         dog.move(last_time=3.5, vy=25000)
-        _move_right_until_letter(dog, detector)
+        _move_sideways_until_letter(dog, detector, direction="right")
+        dog.move(last_time=1, vx=-20000)
+        _move_sideways_until_letter(dog, detector, direction="left", max_move_seconds=2.0)
         time.sleep(0.5)
 
         # ----------------------------
