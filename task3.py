@@ -28,7 +28,7 @@ CENTER_TOLERANCE_BLOCK_PX = 100  # 中心值+-100就认为绿/红色物块在画
 PRE_GRASP_MOVE_SECONDS_X = 0.1   # 抓物块时候狗往前/后移动的时间，调整物块距离
 PRE_GRASP_MOVE_SECONDS_Y = 0.3   # 抓物块时候狗往左/右移动的时间，调整物块在画面中的位置
 PRE_GRASP_MAX_ADJUST_SECONDS = 30.0  # 抓取前最大调整时间，超过这个时间就放弃抓取，重新开始流程。因为如果调整时间过长可能是识别有问题或者位置太偏了，继续调整可能也很难成功。
-GRASP_R_LIMIT_MM = 345.0
+GRASP_R_LIMIT_MM = 395.0
 BLOCK_MISSING_REFIND_COUNT = 5
 
 FORWARD_SECONDS = 2.5
@@ -258,7 +258,7 @@ class Task3:
 
     def x_move_by_depth(self, depth_mm):
         if depth_mm is not None and float(depth_mm) < 300.0:
-            return 10000, 0.1      
+            return 7000, 0.1
         elif depth_mm is not None and float(depth_mm) < 600.0:
             return 20000, 0.3
         return 20000, 0.5
