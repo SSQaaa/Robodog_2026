@@ -65,7 +65,7 @@
       50.0
     ],
     "table_z_base_mm": 120.0,
-    "grasp_z_offset_mm": -40.0,
+    "grasp_z_offset_mm": -50.0,
     "grasp_offset_base_mm": [
       0.0,
       0.0,
@@ -121,7 +121,7 @@
         0.0,
         80.0
       ],
-      "radius_mm": 20.0
+      "radius_mm": 40.0
     },
     "servos": {
       "1": {
