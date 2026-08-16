@@ -115,7 +115,7 @@ def task2_3(dog, detector, start_yaw_deg):
     dog.move(last_time=3.2, vx=-20000)
     time.sleep(0.5)
     dog.revolve_90_r()
-    time.sleep(0.5)
+    time.sleep(1)
 
     print("[Task2_3] start IMU yaw adjustment")
     final_yaw = correct_yaw(

@@ -90,6 +90,7 @@ def main():
             )
             print("[Main] start_yaw_deg={:.3f}".format(start_yaw_deg))
             print("[Main] task1 finished, check yaw once")
+            time.sleep(2)
             correct_yaw(
                 dog,
                 start_yaw_deg - 90.0,
@@ -116,6 +117,7 @@ def main():
         with measure_task(task_seconds, "task2_3"):
             task2_3.run(dog, start_yaw_deg=start_yaw_deg, detector=vision.get_dashboard(retry=True))
         print("[Main] keep task2/task2_3 detector for task3")
+        time.sleep(1)
         dog.revolve_180()
 
         print("[Main] reset arm before task3")

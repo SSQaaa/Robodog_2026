@@ -408,7 +408,7 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         # 一、先运动到第1个仪表盘附近
         # ----------------------------
-        dog.move(last_time=7, vx=20000)
+        dog.move(last_time=6, vx=20000)
         time.sleep(0.5)
         dog.move(last_time=3.5, vy=25000)
         found_letter = _move_sideways_until_letter(
@@ -565,7 +565,7 @@ def task2_new(dog, detector, show_stream=False):
         # 换了个足端感觉没有变斜情况了
         # dog.move(last_time=0.18, vz=10000)
         time.sleep(0.5)
-        dog.move(last_time=5.5, vx=20000)
+        dog.move(last_time=5.8, vx=20000)
         time.sleep(0.5)
         dog.revolve_90_l()
         time.sleep(0.5)
