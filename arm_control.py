@@ -15,9 +15,9 @@ if ARM_DIR not in sys.path:
     sys.path.insert(0, ARM_DIR)
 
 from config import DEFAULT_CONFIG_PATH, load_config
+from coordinates import pixel_to_camera, transform_point
 from kinematics import print_solution, solve_arm_target
 from servo_driver import ServoBus
-from vision_grasp import pixel_to_camera, transform_point
 
 
 class ArmControl:

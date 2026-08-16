@@ -88,11 +88,24 @@ def show_arm_pose(theta1_deg, theta2_deg, theta3_deg, arm_cfg, title=None):
     plt.close(fig)
 
 
-def _servo_pos(arm_cfg, servo_id, angle_deg):
+def _servo_pos(arm_cfg, servo_id, angle_deg, strict=False):
     cfg = arm_cfg["servos"][str(int(servo_id))]
     ticks_per_degree = float(arm_cfg.get("ticks_per_degree", 4096.0 / 360.0))
     raw = float(cfg["zero"]) + float(cfg.get("direction", 1)) * float(angle_deg) * ticks_per_degree
-    return int(round(max(int(cfg.get("min", 0)), min(int(cfg.get("max", 4095)), raw))))
+    low = int(cfg.get("min", 0))
+    high = int(cfg.get("max", 4095))
+    if strict and not (low <= raw <= high):
+        direction = float(cfg.get("direction", 1))
+        angle_at_low = (low - float(cfg["zero"])) / (direction * ticks_per_degree)
+        angle_at_high = (high - float(cfg["zero"])) / (direction * ticks_per_degree)
+        angle_low, angle_high = sorted((angle_at_low, angle_at_high))
+        raise ValueError(
+            "servo {} raw target {:.1f} for angle {:.2f}deg outside [{}, {}]; "
+            "allowed angle [{:.2f}, {:.2f}]deg".format(
+                int(servo_id), raw, float(angle_deg), low, high, angle_low, angle_high
+            )
+        )
+    return int(round(max(low, min(high, raw))))
 
 
 def _limit_margin(arm_cfg, targets):
@@ -149,12 +162,25 @@ def solve_arm_target(x_mm, y_mm, z_mm, arm_cfg):
         theta2 = link2_abs - theta1
         theta3 = horizontal_sum - theta1 - theta2
 
-        targets = {
-            ids["base"]: _servo_pos(arm_cfg, ids["base"], yaw_deg),
-            ids["shoulder"]: _servo_pos(arm_cfg, ids["shoulder"], theta1),
-            ids["elbow"]: _servo_pos(arm_cfg, ids["elbow"], theta2),
-            ids["wrist"]: _servo_pos(arm_cfg, ids["wrist"], theta3),
-        }
+        try:
+            targets = {
+                ids["base"]: _servo_pos(arm_cfg, ids["base"], yaw_deg),
+                ids["shoulder"]: _servo_pos(
+                    arm_cfg,
+                    ids["shoulder"],
+                    theta1,
+                    strict=True,
+                ),
+                ids["elbow"]: _servo_pos(arm_cfg, ids["elbow"], theta2),
+                ids["wrist"]: _servo_pos(arm_cfg, ids["wrist"], theta3),
+            }
+        except ValueError as exc:
+            rejected.append(
+                "servo limit rejected theta=({:.1f}, {:.1f}, {:.1f}): {}".format(
+                    theta1, theta2, theta3, exc
+                )
+            )
+            continue
         safety = check_camera_safety(theta1, theta2, theta3, yaw_deg, arm_cfg)
         if not safety.safe:
             rejected.append(
@@ -184,7 +210,7 @@ def solve_arm_target(x_mm, y_mm, z_mm, arm_cfg):
 
     if not candidates:
         detail = "; ".join(rejected) if rejected else "no valid IK candidates"
-        raise ValueError(f"No valid IK candidate after camera safety filtering: {detail}")
+        raise ValueError(f"No valid IK candidate after servo-limit and camera-safety filtering: {detail}")
 
     candidates.sort(key=lambda item: item[0], reverse=True)
     _, theta1, theta2, theta3, targets = candidates[0]

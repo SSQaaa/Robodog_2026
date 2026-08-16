@@ -2,14 +2,33 @@
 """使用 Orbbec 深度相机检测绿色物块，并可选择执行抓取。"""
 
 import argparse
+import os
+import sys
 import time
+from dataclasses import dataclass
 
 import cv2
 import numpy as np
 
-from config import load_config
-from kinematics import print_solution, solve_arm_target
+from coordinates import pixel_to_camera, transform_point
+from kinematics import print_solution
 from servo_driver import ServoBus
+
+
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_DIR not in sys.path:
+    sys.path.insert(0, PROJECT_DIR)
+
+from arm_control import ArmControl
+
+
+@dataclass
+class StandaloneDetection:
+    """Detection fields consumed by the same ArmControl used by Task3."""
+
+    center: tuple
+    depth_mm: int
+    valid_count: int
 
 
 def start_camera(warmup_s):
@@ -60,24 +79,7 @@ def get_depth_in_color_box(camera, color_box, min_valid_count=20):
     return int(depth_mm), int(valid_count), depth_box
 
 
-def pixel_to_camera(u, v, depth_mm, intrinsics):
-    fx = float(intrinsics["fx"])
-    fy = float(intrinsics["fy"])
-    cx = float(intrinsics["cx"])
-    cy = float(intrinsics["cy"])
-    x = (float(u) - cx) * float(depth_mm) / fx
-    y = (float(v) - cy) * float(depth_mm) / fy
-    z = float(depth_mm)
-    return np.array([x, y, z], dtype=np.float64)
-
-
-def transform_point(T, point):
-    p = np.asarray(point, dtype=np.float64).reshape(3)
-    hp = np.array([p[0], p[1], p[2], 1.0], dtype=np.float64)
-    return (np.asarray(T, dtype=np.float64) @ hp)[:3]
-
-
-def wait_for_grasp_result(camera, config, max_attempts=60, retry_delay_s=0.05):
+def wait_for_grasp_result(camera, arm, max_attempts=60, retry_delay_s=0.05):
     """Wait for a color frame whose matching depth data is ready."""
     last_error = None
     for attempt in range(1, int(max_attempts) + 1):
@@ -86,7 +88,7 @@ def wait_for_grasp_result(camera, config, max_attempts=60, retry_delay_s=0.05):
             last_error = RuntimeError("Color frame is not ready")
         else:
             try:
-                return frame, compute_grasp(camera, frame, config)
+                return frame, compute_grasp(camera, frame, arm)
             except RuntimeError as exc:
                 message = str(exc)
                 if not (
@@ -150,16 +152,13 @@ def draw_block(frame, detection, result=None):
     return frame
 
 
-def compute_grasp(camera, frame, config):
-    block_cfg = config["block"]
+def compute_grasp(camera, frame, arm):
+    block_cfg = arm.block_cfg
     detection, mask = detect_green_block(frame, block_cfg)
     if detection is None:
         raise RuntimeError("Green block not detected. Adjust HSV/min_area or lighting.")
 
     color_intrinsics = camera.get_color_intrinsics()
-    if config["camera"].get("T_base_camera") is None:
-        raise RuntimeError("camera.T_base_camera is missing in params.json. Run calibration.py --samples 60 --save first.")
-    T_base_camera = np.asarray(config["camera"]["T_base_camera"], dtype=np.float64)
     u, v = detection["center"]
     depth_mm, valid_count, depth_box = get_depth_in_color_box(
         camera,
@@ -172,41 +171,36 @@ def compute_grasp(camera, frame, config):
             f"color_box={detection['bbox']}, depth_box={depth_box}"
         )
 
-    point_camera = pixel_to_camera(u, v, depth_mm, color_intrinsics)
-    measured_base = transform_point(T_base_camera, point_camera)
-
-    size = np.asarray(block_cfg.get("size_mm", [100.0, 50.0, 50.0]), dtype=np.float64)
-    grasp_base = measured_base.copy()
-    grasp_base[2] = (
-        float(block_cfg.get("table_z_base_mm", 0.0))
-        + float(size[2]) * 0.5
-        + float(block_cfg.get("grasp_z_offset_mm", 0.0))
+    task3_detection = StandaloneDetection(
+        center=(float(u), float(v)),
+        depth_mm=int(depth_mm),
+        valid_count=int(valid_count),
     )
-    grasp_base += np.asarray(block_cfg.get("grasp_offset_base_mm", [0.0, 0.0, 0.0]), dtype=np.float64)
-
     try:
-        solution = solve_arm_target(grasp_base[0], grasp_base[1], grasp_base[2], config["arm"])
+        plan = arm.compute_pick_plan(task3_detection, color_intrinsics)
     except ValueError as exc:
+        point_camera = pixel_to_camera(u, v, depth_mm, color_intrinsics)
+        measured_base = transform_point(arm.T_base_camera, point_camera)
         raise ValueError(
             "IK failed for detected block: "
             f"pixel=({u:.1f}, {v:.1f}), depth={int(depth_mm)}, valid={int(valid_count)}, "
             f"color_box={detection['bbox']}, depth_box={depth_box}, "
             f"camera_xyz=({point_camera[0]:.1f}, {point_camera[1]:.1f}, {point_camera[2]:.1f}), "
-            f"base_xyz=({measured_base[0]:.1f}, {measured_base[1]:.1f}, {measured_base[2]:.1f}), "
-            f"grasp_xyz=({grasp_base[0]:.1f}, {grasp_base[1]:.1f}, {grasp_base[2]:.1f}); {exc}"
+            f"base_xyz=({measured_base[0]:.1f}, {measured_base[1]:.1f}, {measured_base[2]:.1f}); {exc}"
         ) from exc
-    return {
+    result = dict(plan["target"])
+    result.update({
         "detection": detection,
         "mask": mask,
         "pixel": (float(u), float(v)),
         "depth_mm": int(depth_mm),
         "valid_count": int(valid_count),
         "depth_box": depth_box,
-        "point_camera": point_camera,
-        "measured_base": measured_base,
-        "grasp_base": grasp_base,
-        "solution": solution,
-    }
+        "plan": plan,
+        "task3_detection": task3_detection,
+        "color_intrinsics": color_intrinsics,
+    })
+    return result
 
 
 def print_result(result):
@@ -236,11 +230,10 @@ def read_solution_status(config, solution):
 
 
 def print_grasp_dry_run(result, config):
-    arm_cfg = config["arm"]
-    lift = float(arm_cfg.get("pre_grasp_lift_mm", 40.0))
-    grasp = result["grasp_base"]
-    pre_solution = solve_arm_target(grasp[0], grasp[1], grasp[2] + lift, arm_cfg)
-    grasp_solution = result["solution"]
+    plan = result["plan"]
+    pre_solution = plan["pre_solution"]
+    grasp_solution = plan["target"]["solution"]
+    post_solution = plan["post_solution"]
 
     print("[DryRun] pre-grasp arm angles and servo targets")
     pre_status = read_solution_status(config, pre_solution)
@@ -250,34 +243,9 @@ def print_grasp_dry_run(result, config):
     grasp_status = read_solution_status(config, grasp_solution)
     print_solution(grasp_solution, current_status=grasp_status)
 
-
-def execute_grasp(result, config):
-    arm_cfg = config["arm"]
-    solution = result["solution"]
-    lift = float(arm_cfg.get("pre_grasp_lift_mm", 40.0))
-    grasp = result["grasp_base"]
-    pre_solution = solve_arm_target(grasp[0], grasp[1], grasp[2] + lift, arm_cfg)
-
-    bus = ServoBus(arm_cfg)
-    try:
-        print("[Execute] current before motion")
-        bus.print_status()
-        print("[Execute] open gripper")
-        bus.open_gripper()
-        print("[Execute] move pre-grasp")
-        print_solution(pre_solution)
-        bus.move_targets(pre_solution.servo_targets, wait_s=1.5)
-        print("[Execute] move grasp")
-        print_solution(solution)
-        bus.move_targets(solution.servo_targets, wait_s=1.5)
-        print("[Execute] close gripper with current limit")
-        bus.close_gripper_protected()
-        print("[Execute] lift")
-        bus.move_targets(pre_solution.servo_targets, wait_s=1.5)
-        print("[Execute] final status")
-        bus.print_status()
-    finally:
-        bus.close()
+    print("[DryRun] post-grasp arm angles and servo targets")
+    post_status = read_solution_status(config, post_solution)
+    print_solution(post_solution, current_status=post_status)
 
 
 def parse_args():
@@ -295,14 +263,15 @@ def main():
     args = parse_args()
     if args.dry_run and args.execute:
         raise ValueError("--dry-run and --execute cannot be used together")
-    config = load_config(args.config)
+    arm = ArmControl(config_path=args.config)
+    config = arm.config
     camera = start_camera(config["camera"].get("warmup_s", 1.0))
     try:
         print(f"[Orbbec] color size: {camera.get_color_size()}")
         print(f"[Orbbec] depth size : {camera.get_depth_size()}")
         frame, result = wait_for_grasp_result(
             camera,
-            config,
+            arm,
             max_attempts=args.max_attempts,
             retry_delay_s=args.retry_delay,
         )
@@ -313,7 +282,16 @@ def main():
             cv2.imshow("task3_new green mask", result["mask"])
             cv2.waitKey(0)
         if args.execute:
-            execute_grasp(result, config)
+            arm.start()
+            try:
+                picked = arm.pick_block(
+                    "Green",
+                    result["task3_detection"],
+                    result["color_intrinsics"],
+                )
+                print(f"[Execute] Task3 pick result={picked}")
+            finally:
+                arm.close()
         else:
             print_grasp_dry_run(result, config)
             print("[DryRun] not moving servos. Add --execute to run the grasp sequence.")
