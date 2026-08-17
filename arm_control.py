@@ -94,6 +94,17 @@ class ArmControl:
         print("[Pick] Warning: failed to grasp the block")
         return False
 
+    def lift_after_failed_grasp(self, detection, color_intrinsics, lift_mm=100.0):
+        """Lift away from the failed grasp point; horizontal retraction is allowed."""
+        result = self.compute_grasp_target(detection, color_intrinsics)
+        solution = self.solve_lift_target(result["grasp_base"], lift_mm, "failed_grasp")
+        print(
+            f"[PickRetry] lift after failed grasp: "
+            f"z={result['grasp_base'][2]:.1f}->{solution.z_mm:.1f}mm, "
+            f"r={result['solution'].r_mm:.1f}->{solution.r_mm:.1f}mm"
+        )
+        self.bus.move_targets(solution.servo_targets, wait_s=1.5)
+
     def compute_pick_plan(self, detection, color_intrinsics):
         result = self.compute_grasp_target(detection, color_intrinsics)
         pre_lift = float(self.arm_cfg.get("pre_grasp_lift_mm", 40.0))

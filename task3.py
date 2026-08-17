@@ -28,7 +28,8 @@ CENTER_TOLERANCE_BLOCK_PX = 100  # 中心值+-100就认为绿/红色物块在画
 PRE_GRASP_MOVE_SECONDS_X = 0.1   # 抓物块时候狗往前/后移动的时间，调整物块距离
 PRE_GRASP_MOVE_SECONDS_Y = 0.3   # 抓物块时候狗往左/右移动的时间，调整物块在画面中的位置
 PRE_GRASP_MAX_ADJUST_SECONDS = 30.0  # 抓取前最大调整时间，超过这个时间就放弃抓取，重新开始流程。因为如果调整时间过长可能是识别有问题或者位置太偏了，继续调整可能也很难成功。
-GRASP_R_LIMIT_MM = 395.0
+GRASP_R_LIMIT_MM = 380.0
+FAILED_GRASP_LIFT_MM = 100.0
 BLOCK_MISSING_REFIND_COUNT = 5
 
 FORWARD_SECONDS = 2.5
@@ -111,8 +112,7 @@ class Task3:
         time.sleep(0.5)
         self.approach_box_2(letter)
         time.sleep(0.5)
-        # 到达30cm后再往前冲刺一咪咪
-        self.dog.move(vx=10000, last_time=0.30, duration=0.3)
+        self.dog.move(vx=10000, last_time=0.25, duration=0.3)
         self.arm.place_block()
         with ThreadPoolExecutor(max_workers=1) as executor:
             reset_future = executor.submit(self.arm.reset)
@@ -259,6 +259,8 @@ class Task3:
     def x_move_by_depth(self, depth_mm):
         if depth_mm is not None and float(depth_mm) < 300.0:
             return 7000, 0.1
+        elif depth_mm is not None and float(depth_mm) < 400.0:
+            return 10000, 0.1
         elif depth_mm is not None and float(depth_mm) < 600.0:
             return 20000, 0.3
         return 20000, 0.5
@@ -268,6 +270,7 @@ class Task3:
         attempt = 1
         while True:
             print(f"[PickRetry] attempt {attempt}")
+            block = None
             try:
                 self.adjust_before_grasp_1(block_class)
                 time.sleep(0.5)
@@ -278,6 +281,15 @@ class Task3:
                 print(f"[PickRetry] adjust/pick failed with exception: {exc}")
             if picked:
                 return
+            if block is not None:
+                try:
+                    self.arm.lift_after_failed_grasp(
+                        block,
+                        self.vision.color_intrinsics,
+                        lift_mm=FAILED_GRASP_LIFT_MM,
+                    )
+                except Exception as exc:
+                    print(f"[PickRetry] failed-grasp lift failed: {exc}")
             print("[PickRetry] grasp failed, adjust and try again")
             attempt += 1
             time.sleep(0.5)
@@ -359,10 +371,17 @@ class Task3:
             print(f"[GraspAdjust_2] {block_class} error_x={error_x:.1f}px")
 
             if abs(error_x) > CENTER_TOLERANCE_BLOCK_PX:
-                    raise RuntimeError(
-                        f"{block_class} lateral error too large in grasp adjust 2: "
-                        f"error_x={error_x:.1f}px; rerun coarse alignment"
-                    )
+                vy = PRE_GRASP_MOVE_SPEED_Y if error_x > 0 else -PRE_GRASP_MOVE_SPEED_Y
+                self.dog.move(
+                    vy=vy,
+                    last_time=PRE_GRASP_MOVE_SECONDS_Y,
+                    duration=0.3,
+                )
+                print(
+                    f"[GraspAdjust_2] move "
+                    f"{'right' if vy > 0 else 'left'} to correct lateral error"
+                )
+                continue
 
             if block.depth_mm is None:
                 print("[GraspAdjust_2] depth invalid, move backward a little")
@@ -437,41 +456,48 @@ class Task3:
         print(f"[Box] approach to {letter}")
         deadline = time.time() + MAX_ALIGN_SECONDS
         depth_none_count = 0
-        target_none_count = 0
+        no_letter_count = 0
         last_depth_mm = None
         last_seen = None
 
         while time.time() < deadline:
-            frame, matches = self.detect_matches(letter)
+            frame, detections = self.vision.detect()
             if frame is None:
                 continue
 
-            # 如果没找到并且给上一次的距离是80cm以内，就直接认为找到了
-            if not matches:
-                target_none_count += 1
-                if target_none_count < 3:
-                    print(f"[Box] {letter} not found attempt {target_none_count}/3")
+            matches = [det for det in detections if det.class_name == letter]
+            visible_letters = [
+                det for det in detections if det.class_name in BOX_LETTER_ORDER
+            ]
+
+            # 只有画面中任何箱子字母都没识别到时，才累计“到达”计数。
+            if not visible_letters:
+                no_letter_count += 1
+                if no_letter_count < 3:
+                    print(f"[Box] no letter found attempt {no_letter_count}/3")
                     time.sleep(0.1)
                     continue
-                
-                # 连续三次没找到，就站定再识别，防止因为抖动导致的识别失败  
+
                 if last_depth_mm is not None and last_depth_mm < BOX_SEENED_DEPTH_MM:
                     print(
-                        f"[Box] {letter} lost for 3 frames after near depth={last_depth_mm:.1f}mm, "
+                        f"[Box] no letter found for 3 frames after near "
+                        f"depth={last_depth_mm:.1f}mm, "
                         "treat as reached"
                     )
                     self.dog.stop()
                     return
 
-                print(f"[Box] {letter} not found after 3 attempts")
-                target_none_count = 0
+                print("[Box] no letter found after 3 attempts")
+                no_letter_count = 0
                 frame, matches = self.refind_box_letter(letter)
                 if frame is None or not matches:
                     continue
-            
-            # 找到了就清空计数器
             else:
-                target_none_count = 0
+                no_letter_count = 0
+                if not matches:
+                    frame, matches = self.refind_box_letter(letter)
+                    if frame is None or not matches:
+                        continue
 
             matches.sort(key=lambda det: (det.area, det.conf), reverse=True)
             target = matches[0]
