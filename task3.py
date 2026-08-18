@@ -38,7 +38,7 @@ MAX_ALIGN_SECONDS = 60.0
 BOX_LOST_NEAR_DEPTH_MM = 300.0
 BOX_SEENED_DEPTH_MM = 1000.0
 
-BACK_OFFSET_TIME = 6.0
+BACK_OFFSET_TIME = 6.5
 
 RETURN_FORWARD_SECONDS = 2.5
 RETURN_RED_MAX_DEPTH_MM = 600.0
@@ -106,13 +106,22 @@ class Task3:
         self.dog.revolve_180()
         # 往前走
         self.dog.move(vx=FORWARD_SPEED, last_time=FORWARD_SECONDS, duration=0.3)
-        time.sleep(0.5)
+        time.sleep(1.5)
 
-        self.approach_box_1(letter)
+        # D 容易被模型误识别成 B。处理 D 时先按 C 的识别框完成箱子
+        # 对正和接近，真正的任务字母仍保留为 D。
+        vision_letter = "C" if letter == "D" else letter
+        if vision_letter != letter:
+            print(f"[Box] {letter} uses {vision_letter} as visual alignment reference")
+
+        self.approach_box_1(vision_letter)
         time.sleep(0.5)
-        self.approach_box_2(letter)
+        self.approach_box_2(vision_letter)
         time.sleep(0.5)
         self.dog.move(vx=10000, last_time=0.25, duration=0.3)
+        if letter == "D":
+            print("[Box] D aligned from C, shift right before opening gripper")
+            self.dog.move(vy=25000, last_time=3, duration=0.3)
         self.arm.place_block()
         with ThreadPoolExecutor(max_workers=1) as executor:
             reset_future = executor.submit(self.arm.reset)

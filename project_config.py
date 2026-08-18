@@ -36,15 +36,34 @@ STATUS_CN_TO_TASK3 = {
 }
 UNKNOWN_STATE_CN = "未知"
 
+################################################################################
+# 状态缩写：L=偏低（异常），H=偏高（异常），Z=正常。
+# 写死：True，不写死:False
+task2stable = True
+# False：字母水平/深度对齐后跳过 UPDOWN、SSI 和仪表盘指针识别，
+#        等待 2 秒并直接使用 TASK2_DASHBOARD_CONFIG 播报和记录。
+
+# True ：保留原有完整仪表盘识别流程。
+# 不蹲：False,蹲 true
+task2recognize_dashboard = False
+TASK2_DASHBOARD_CONFIG = (
+    ("B", "L"),
+    ("C", "H"),
+    ("D", "Z"),
+    ("A", "Z"),
+)
+
 DEFAULT_DASHBOARD_STATUS = {
     "A": "NORMAL",
     "B": "ABNORMAL",
-    "C": "NORMAL",
-    "D": "ABNORMAL",
+    "C": "ABNORMAL",
+    "D": "NORMAL",
 }
+
 
 BOX_LETTER_ORDER = ("A", "B", "C", "D")
 
+##############################################################################
 DOG_IP = "192.168.1.120"
 DOG_PORT = 43893
 

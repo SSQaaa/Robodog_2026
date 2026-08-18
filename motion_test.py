@@ -23,7 +23,7 @@ def main():
         # dog.close_continue()
         # dog.stop()
         # time.sleep(0.5)
-        dog.move(vx=20000, vy=25000, last_time=0.5, duration=MOVE_SETTLE_S)
+        dog.move(vx=0, vy=25000, last_time=2.5, duration=MOVE_SETTLE_S)
         dog.stop()
         time.sleep(2)
 

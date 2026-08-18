@@ -147,12 +147,7 @@ class ArmControl:
         raise ValueError(f"{label}_lift target is unreachable even with retract: {last_exc}")
 
     def place_block(self):
-        solution = self.compute_place_pose()
-        print("[Place] move to forward reach pose")
-        print_solution(solution)
-        self.bus.move_targets(solution.servo_targets, wait_s=1.5)
-
-        print("[Place] open gripper")
+        print("[Place] keep post-grasp pose and open gripper")
         self.bus.open_gripper()
         time.sleep(0.5)
 

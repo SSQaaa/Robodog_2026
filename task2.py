@@ -15,7 +15,13 @@
 
 import time
 
+from project_config import (
+    TASK2_DASHBOARD_CONFIG,
+    task2recognize_dashboard,
+    task2stable,
+)
 from tools.audio_announce import announce_dashboard
+from tools.motion import DogControl
 from tools.vision import DashboardInfer, analyze_infer_output
 from tools.world_pose import correct_yaw, read_yaw_deg
 
@@ -23,6 +29,55 @@ from tools.world_pose import correct_yaw, read_yaw_deg
 LETTER_ALIGN_MIN_DEPTH_M = 0.35
 LETTER_ALIGN_BACKWARD_VX = -20000
 LETTER_ALIGN_BACKWARD_TIME_S = 0.10
+
+TASK2_STATE_CODE_TO_CN = {
+    "L": "偏低",
+    "H": "偏高",
+    "Z": "正常",
+}
+
+
+def _configured_dashboard_result(dashboard_index):
+    """读取并校验指定序号的 Task2 配置结果。"""
+    if len(TASK2_DASHBOARD_CONFIG) != 4:
+        raise ValueError("TASK2_DASHBOARD_CONFIG 必须正好配置 4 个仪表盘")
+
+    letter, state_code = TASK2_DASHBOARD_CONFIG[dashboard_index - 1]
+    letter = str(letter).strip().upper()
+    state_code = str(state_code).strip().upper()
+    if letter not in ("A", "B", "C", "D"):
+        raise ValueError("Task2 第{}个仪表盘字母无效: {}".format(dashboard_index, letter))
+    if state_code not in TASK2_STATE_CODE_TO_CN:
+        raise ValueError("Task2 第{}个仪表盘状态无效: {}".format(dashboard_index, state_code))
+    return letter, TASK2_STATE_CODE_TO_CN[state_code]
+
+
+def _stable_dashboard_result(dashboard_index):
+    """返回配置的展示结果；关闭稳定模式时返回 None。"""
+    if not task2stable:
+        return None
+    return _configured_dashboard_result(dashboard_index)
+
+
+def _finish_dashboard_from_config(dashboard_index):
+    """跳过仪表盘识别，直接按配置输出、播报并生成记录。"""
+    final_letter, final_dashboard_state = _configured_dashboard_result(dashboard_index)
+    print("D{} 状态读取完成（配置）：{}".format(dashboard_index, final_dashboard_state))
+    print("D{} 字母读取完成（配置）：{}".format(dashboard_index, final_letter))
+    announce_dashboard(final_letter, final_dashboard_state)
+    record = {
+        "dashboard_index": dashboard_index,
+        "dashboard_state": final_dashboard_state,
+        "letter": final_letter,
+    }
+    print("第{}个仪表盘记录完成（配置）：{}".format(dashboard_index, record))
+    return record
+
+
+def _dashboard_updown(dog):
+    """仅在启用仪表盘识别时切换检测姿态。"""
+    if task2recognize_dashboard:
+        dog.UPDOWN()
 
 
 def _calc_center_x_from_vertices(vertices):
@@ -116,7 +171,9 @@ def _wait_single_dashboard(detector, dog):
         time.sleep(0.2)
 
 
-def _read_state_normal_loop(detector, need_frames=3, max_frames=40, interval_s=0.5):
+def _read_state_normal_loop(
+    detector, need_frames=3, max_frames=40, interval_s=0.5, display_state=None
+):
     """普通循环：稳定读取仪表盘状态。"""
     last_state = None
     same_count = 0
@@ -144,7 +201,8 @@ def _read_state_normal_loop(detector, need_frames=3, max_frames=40, interval_s=0
                 last_state = state_cn
                 same_count = 1
 
-            print("READ_STATE: 当前={} 连续={}/{}".format(state_cn, same_count, need_frames))
+            shown_state = display_state if display_state is not None else state_cn
+            print("READ_STATE: 当前={} 连续={}/{}".format(shown_state, same_count, need_frames))
 
             if same_count >= need_frames:
                 return state_cn
@@ -156,7 +214,7 @@ def _read_state_normal_loop(detector, need_frames=3, max_frames=40, interval_s=0
         time.sleep(interval_s)
 
 
-def _read_letter_normal_loop(detector, need_frames=3, max_frames=40):
+def _read_letter_normal_loop(detector, need_frames=3, max_frames=40, display_letter=None):
     """普通循环：稳定读取字母。"""
     last_letter = None
     same_count = 0
@@ -180,7 +238,8 @@ def _read_letter_normal_loop(detector, need_frames=3, max_frames=40):
                 last_letter = letter
                 same_count = 1
 
-            print("READ_LETTER: 当前={} 连续={}/{}".format(letter, same_count, need_frames))
+            shown_letter = display_letter if display_letter is not None else letter
+            print("READ_LETTER: 当前={} 连续={}/{}".format(shown_letter, same_count, need_frames))
 
             if same_count >= need_frames:
                 return letter
@@ -202,6 +261,14 @@ def _run_single_dashboard_with_detector(
     max_letter_distance_adjust_count,
     max_ssi_check_retry_count,
 ):
+    stable_result = (
+        _configured_dashboard_result(dashboard_index)
+        if not task2recognize_dashboard
+        else _stable_dashboard_result(dashboard_index)
+    )
+    stable_letter = stable_result[0] if stable_result is not None else None
+    stable_state = stable_result[1] if stable_result is not None else None
+
     # ----------------------------
     # 二、状态机：先让字母位置合适（居中+距离），再切换到匍匐
     # ----------------------------
@@ -229,7 +296,8 @@ def _run_single_dashboard_with_detector(
                 time.sleep(0.5)
             continue
 
-        letter = letter_det["letter"]
+        detected_letter = letter_det["letter"]
+        letter = stable_letter if stable_letter is not None else detected_letter
         letter_x_center = float(letter_det["x_center"])
         letter_distance_m = letter_det["distance_m"]
         letter_missing_count = 0
@@ -330,6 +398,11 @@ def _run_single_dashboard_with_detector(
                 letter_distance_adjust_count = 0
             continue
 
+    if not task2recognize_dashboard:
+        print("D{} 字母水平和深度对齐完成，等待2秒后使用配置结果".format(dashboard_index))
+        time.sleep(2.0)
+        return _finish_dashboard_from_config(dashboard_index)
+
     # ----------------------------
     # 三、普通循环：等待单仪表盘
     # ----------------------------
@@ -339,7 +412,7 @@ def _run_single_dashboard_with_detector(
     # 四、普通if：只做ssi可见性检查
     # ----------------------------
     time.sleep(1.8)
-    dog.UPDOWN()
+    _dashboard_updown(dog)
     # time.sleep(2)
     ssi_check_retry_count = 0
     while True:
@@ -375,14 +448,20 @@ def _run_single_dashboard_with_detector(
         detector,
         need_frames=3,
         max_frames=40,
+        display_state=stable_state,
     )
+    if stable_state is not None:
+        final_dashboard_state = stable_state
     print("D{} 状态读取完成：{}".format(dashboard_index, final_dashboard_state))
 
     final_letter = _read_letter_normal_loop(
         detector,
         need_frames=3,
         max_frames=40,
+        display_letter=stable_letter,
     )
+    if stable_letter is not None:
+        final_letter = stable_letter
     print("D{} 字母读取完成：{}".format(dashboard_index, final_letter))
     announce_dashboard(final_letter, final_dashboard_state)
 
@@ -408,7 +487,7 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         # 一、先运动到第1个仪表盘附近
         # ----------------------------
-        # dog.move(last_time=6, vx=20000)
+        dog.move(last_time=7, vx=20000)
         time.sleep(0.5)
         dog.move(last_time=3.5, vy=25000)
         found_letter = _move_sideways_until_letter(
@@ -418,7 +497,7 @@ def task2_new(dog, detector, show_stream=False):
         )
         if not found_letter:
             print("右移未找到字母，后退一点后开始左移")
-            dog.move(last_time=0.5, vx=-20000)
+            dog.move(last_time=0.5, vx=-10000)
             _move_sideways_until_letter(
                 dog,
                 detector,
@@ -458,7 +537,7 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         # 一、先运动到第2个仪表盘附近
         # ----------------------------
-        dog.UPDOWN()
+        _dashboard_updown(dog)
         time.sleep(0.5)
         dog.revolve_180()
         time.sleep(0.5)
@@ -502,7 +581,7 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         # 一、先运动到第3个仪表盘附近
         # ----------------------------
-        dog.UPDOWN()
+        _dashboard_updown(dog)
         time.sleep(0.5)
         dog.move(last_time=5.0, vy=-25000)
         time.sleep(0.5)
@@ -541,7 +620,7 @@ def task2_new(dog, detector, show_stream=False):
         # ----------------------------
         # 一、先运动到第4个仪表盘附近
         # ----------------------------
-        dog.UPDOWN()
+        _dashboard_updown(dog)
         time.sleep(0.5)
         yaw_before_turn = read_yaw_deg()
         dog.revolve_90_r()
@@ -600,7 +679,7 @@ def task2_new(dog, detector, show_stream=False):
             summary_list.append([rec["dashboard_index"], rec["letter"], rec["dashboard_state"]])
         print("四个仪表盘汇总列表：{}".format(summary_list))
         print("task2_new finished")
-        dog.UPDOWN()
+        _dashboard_updown(dog)
         time.sleep(0.5)
 
     finally:
@@ -620,3 +699,20 @@ def run(dog, show_stream=False, detector=None):
             detector.close()
             print("[Task2] detector closed")
 
+def main():
+    """独立调试 Task 2，不需要通过 main.py 运行其他任务。"""
+    dog = None
+    try:
+        dog = DogControl()
+        dog.stand_up()
+        dog.close_continue()
+        dog.stop()
+        run(dog)
+    finally:
+        if dog is not None:
+            dog.stop()
+            dog.close()
+
+
+if __name__ == "__main__":
+    main()
